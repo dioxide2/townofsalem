@@ -11,17 +11,14 @@
 <body>
 <div id="fog"></div>
 
-<!-- ============ HOME ============ -->
 <section id="home" class="screen active">
   <div class="home-inner">
     <div class="title-emblem" id="titleEmblem"></div>
     <h1 class="game-title">Salem Nights</h1>
     <p class="tagline">A village of secrets. Trust no one after dark.</p>
-
     <div class="home-card">
       <label>Your Name</label>
       <input id="nameInput" maxlength="16" placeholder="e.g. Goodwife Ann" autocomplete="off"/>
-
       <div class="home-actions">
         <button id="createBtn" class="btn primary">Create Room</button>
         <div class="join-row">
@@ -31,18 +28,17 @@
       </div>
       <p id="homeError" class="error"></p>
     </div>
-    <p class="footnote">An original social-deduction game in the spirit of the Mafia/Werewolf tradition. Play with 7–15 players.</p>
+    <p class="footnote">An original social-deduction game in the spirit of the Mafia/Werewolf tradition. Play with 7-15 players.</p>
   </div>
 </section>
 
-<!-- ============ LOBBY ============ -->
 <section id="lobby" class="screen">
   <div class="lobby-inner">
     <h2>The Gathering</h2>
     <div class="room-code-box">Room Code: <span id="roomCode"></span>
       <button id="copyCode" class="btn tiny">Copy</button>
     </div>
-    <p class="hint">Share this code with your coworkers. Need 7–15 players.</p>
+    <p class="hint">Share this code with your coworkers. Need 7-15 players.</p>
     <div id="lobbyPlayers" class="lobby-players"></div>
     <button id="startBtn" class="btn primary" disabled>Begin the Trials</button>
     <p id="lobbyHint" class="hint"></p>
@@ -50,7 +46,6 @@
   </div>
 </section>
 
-<!-- ============ GAME ============ -->
 <section id="game" class="screen">
   <header id="gameHeader">
     <div class="phase-info">
@@ -63,7 +58,7 @@
   <div class="game-body">
     <aside id="rolePanel" class="role-panel">
       <div id="roleEmblem" class="role-emblem-wrap"></div>
-      <h3 id="roleName">—</h3>
+      <h3 id="roleName">-</h3>
       <div id="roleTeam" class="role-team"></div>
       <p id="roleSummary" class="role-summary"></p>
       <p id="roleDetail" class="role-detail"></p>
@@ -75,7 +70,13 @@
     <main class="board">
       <div id="announce" class="announce"></div>
       <div id="trialBox" class="trial-box hidden"></div>
-      <div id="playerGrid" class="player-grid"></div>
+      <div id="villageScene">
+        <div class="stars"></div>
+        <div class="sky-orb"></div>
+        <div class="ground"></div>
+        <div id="village" class="village"></div>
+        <div id="phaseFlash"></div>
+      </div>
       <div id="actionBar" class="action-bar"></div>
     </main>
 
@@ -90,10 +91,9 @@
   </div>
 </section>
 
-<!-- ============ GAME OVER ============ -->
 <section id="over" class="screen">
   <div class="over-inner">
-    <h1 id="winnerTitle">—</h1>
+    <h1 id="winnerTitle">-</h1>
     <p id="winnerMsg"></p>
     <div id="individualWins"></div>
     <div id="finalRoles" class="final-roles"></div>

@@ -3,6 +3,7 @@ const socket = io();
 let myId = null;
 let state = null;
 let selectedTarget = null;
+let prevIsDay = null;
 
 const $ = sel => document.querySelector(sel);
 const screens = { home: $('#home'), lobby: $('#lobby'), game: $('#game'), over: $('#over') };
@@ -11,7 +12,6 @@ function show(name) {
   screens[name].classList.add('active');
 }
 
-// title emblem
 $('#titleEmblem').innerHTML = emblemFor('Jailor');
 
 // ---------- HOME ----------
@@ -36,10 +36,7 @@ $('#joinBtn').onclick = () => {
 $('#codeInput').addEventListener('input', e => e.target.value = e.target.value.toUpperCase());
 function showHomeError(msg) { $('#homeError').textContent = msg; }
 
-function enterLobby(code) {
-  $('#roomCode').textContent = code;
-  show('lobby');
-}
+function enterLobby(code) { $('#roomCode').textContent = code; show('lobby'); }
 $('#copyCode').onclick = () => navigator.clipboard?.writeText($('#roomCode').textContent);
 $('#leaveBtn').onclick = () => { socket.emit('leaveRoom'); location.reload(); };
 $('#overHome').onclick = () => location.reload();
@@ -47,51 +44,47 @@ $('#startBtn').onclick = () => socket.emit('startGame');
 
 // ---------- SOCKET ----------
 socket.on('connect', () => { myId = socket.id; });
-
-socket.on('state', s => {
-  state = s;
-  render();
-});
-
+socket.on('state', s => { state = s; render(); });
 socket.on('tick', ({ timeLeft, phase }) => {
   if (state) { state.timeLeft = timeLeft; state.phase = phase; }
   $('#timer').textContent = timeLeft > 0 ? timeLeft : '';
 });
-
-socket.on('actionAck', ({ targetId }) => { selectedTarget = targetId; renderGrid(); });
-socket.on('jailAck', ({ targetId }) => { selectedTarget = targetId; renderGrid(); });
-
+socket.on('actionAck', ({ targetId }) => { selectedTarget = targetId; renderVillage(); });
+socket.on('jailAck', ({ targetId }) => { selectedTarget = targetId; renderVillage(); });
 socket.on('chat', msg => addChat(msg));
 
 // ---------- RENDER ----------
 function render() {
   if (!state) return;
   const phase = state.phase;
-
   if (phase === 'lobby') { renderLobby(); show('lobby'); return; }
   if (phase === 'gameOver') { renderOver(); show('over'); return; }
 
   show('game');
+  const day = isDayPhase(phase);
+  document.body.classList.toggle('is-day', day);
+  // flash on day<->night change
+  if (prevIsDay !== null && prevIsDay !== day) {
+    const f = $('#phaseFlash'); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash');
+  }
+  prevIsDay = day;
+
   renderHeader();
   renderRolePanel();
   renderAnnounce();
   renderTrial();
-  renderGrid();
+  renderVillage();
   renderActionBar();
   updateChatChannel();
-  document.body.classList.toggle('is-day', isDayPhase(phase));
 }
 
-function isDayPhase(p) { return ['dayAnnounce','discussion','voting','defense','judgment','lastWords'].includes(p); }
+function isDayPhase(p) { return ['dayAnnounce', 'discussion', 'voting', 'defense', 'judgment', 'lastWords'].includes(p); }
 
 function renderLobby() {
   const wrap = $('#lobbyPlayers');
   wrap.innerHTML = state.players.map(p => `
-    <div class="lobby-player">
-      ${avatarToken(p.name, true)}
-      <span>${esc(p.name)}</span>
-      ${p.isHost ? '<span class="host-tag">Host</span>' : ''}
-    </div>`).join('');
+    <div class="lobby-player">${avatarToken(p.name, true)}
+      <span>${esc(p.name)}</span>${p.isHost ? '<span class="host-tag">Host</span>' : ''}</div>`).join('');
   const n = state.players.length;
   const isHost = state.hostId === myId;
   const startBtn = $('#startBtn');
@@ -129,10 +122,8 @@ function renderRolePanel() {
   $('#roleDetail').textContent = me.detail || '';
 
   const stats = [];
-  if (me.bullets) stats.push(`Bullets: ${me.bullets}`);
-  if (me.alerts) stats.push(`Alerts: ${me.alerts}`);
-  if (me.executions) stats.push(`Executions: ${me.executions}`);
-  if (me.execTargetName) stats.push(`Target: ${me.execTargetName}`);
+  if (me.roleKey === 'Vigilante') stats.push(`Bullets: ${me.bullets}`);
+  if (me.roleKey === 'Jailor') stats.push(`Executions: ${me.executions}`);
   if (!me.alive) stats.push('Deceased');
   $('#roleStats').innerHTML = stats.map(s => `<span class="chip">${esc(s)}</span>`).join('');
 
@@ -141,7 +132,6 @@ function renderRolePanel() {
       state.allies.map(a => `<div class="ally">${esc(a.name)} — ${esc(a.role)}${a.alive ? '' : ' (dead)'}</div>`).join('')
     : '';
 
-  // night feedback
   if (me.feedback && me.feedback.length && state.phase === 'dayAnnounce') {
     me.feedback.forEach(f => addChat({ from: 'Whispers', text: f, channel: 'system' }));
     me.feedback = [];
@@ -155,28 +145,26 @@ function renderAnnounce() {
       `<span class="death">☠ ${esc(d.name)} ${esc(d.reason)}. They were the <b>${esc(d.role)}</b>.</span>`).join('');
   } else if (state.phase === 'dayAnnounce') {
     box.innerHTML = '<span>The village awoke to find everyone alive.</span>';
-  } else {
-    box.innerHTML = '';
-  }
+  } else { box.innerHTML = ''; }
 }
 
 function renderTrial() {
   const box = $('#trialBox');
-  if (state.phase === 'defense' || state.phase === 'judgment' || state.phase === 'lastWords') {
+  if (['defense', 'judgment', 'lastWords'].includes(state.phase)) {
     const def = state.players.find(p => p.id === state.onTrial);
     if (!def) { box.classList.add('hidden'); return; }
     box.classList.remove('hidden');
     let html = `<h3>${esc(def.name)} stands accused</h3>`;
     if (state.phase === 'defense') html += `<p>They may defend themselves. Prepare your verdict.</p>`;
     if (state.phase === 'judgment') {
-      const onTrialIsMe = state.onTrial === myId;
+      const meOnTrial = state.onTrial === myId;
       html += `<p>Cast your judgment. (${state.judgmentCount || 0} votes cast)</p>`;
-      if (state.me.alive && !onTrialIsMe) {
+      if (state.me.alive && !meOnTrial) {
         html += `<div class="judgment-btns">
           <button class="btn guilty" onclick="judge('guilty')">Guilty</button>
           <button class="btn innocent" onclick="judge('innocent')">Innocent</button>
           <button class="btn" onclick="judge('abstain')">Abstain</button></div>`;
-      } else if (onTrialIsMe) {
+      } else if (meOnTrial) {
         html += `<p style="color:var(--gold)">You are on trial. Plead your case in chat.</p>`;
       }
     }
@@ -184,33 +172,34 @@ function renderTrial() {
       html += `<p>Verdict: <b style="color:var(--mafia)">${state.trialResult.guilty} Guilty</b> / ${state.trialResult.innocent} Innocent. The rope is readied…</p>`;
     }
     box.innerHTML = html;
-  } else {
-    box.classList.add('hidden');
-  }
+  } else { box.classList.add('hidden'); }
 }
 
-function renderGrid() {
-  const grid = $('#playerGrid');
+// ---------- VILLAGE ----------
+function renderVillage() {
+  const v = $('#village');
   if (!state.me) return;
-  const meAlive = state.me.alive;
-  const phase = state.phase;
   const tally = state.voteTally ? state.voteTally.tally : {};
-
-  grid.innerHTML = state.players.map(p => {
+  const allyIds = new Set((state.allies || []).map(a => a.name)); // by name (no ids in allies)
+  v.innerHTML = state.players.map(p => {
     const isMe = p.id === myId;
-    const selectable = meAlive && canTarget(p);
-    const classes = ['pcard'];
-    if (!p.alive) classes.push('dead');
-    if (isMe) classes.push('me');
-    if (selectable) classes.push('selectable');
-    if (selectedTarget === p.id) classes.push('selected');
-    const vc = (phase === 'voting' && tally[p.id]) ? `<span class="votecount">${tally[p.id]}</span>` : '';
-    const role = p.revealedRole ? `<div class="prole">${esc(p.revealedRole)}</div>` : '<div class="prole">&nbsp;</div>';
-    const mayor = p.mayorRevealed ? '<span class="badge mayor-star">★ Mayor</span>' : '';
-    return `<div class="${classes.join(' ')}" data-id="${p.id}" onclick="pick('${p.id}')">
-      ${vc}${mayor}
-      ${avatarToken(p.name, p.alive)}
-      <div class="pname">${esc(p.name)}${isMe ? ' (you)' : ''}</div>
+    const selectable = state.me.alive && canTarget(p);
+    const cls = ['house'];
+    if (!p.alive) cls.push('dead');
+    if (isMe) cls.push('me');
+    if (selectable) cls.push('selectable');
+    if (selectedTarget === p.id) cls.push('selected');
+    const vc = (state.phase === 'voting' && tally[p.id]) ? `<span class="votecount">${tally[p.id]}</span>` : '';
+    const ally = (state.me.team === 'Mafia' && p.alive && allyIds.has(p.name) && !isMe) ? '<span class="ally-mark">🗡</span>' : '';
+    const figure = p.alive
+      ? `<div class="villager">${figureSVG(p.name)}</div>`
+      : `<div class="tomb">${tombstoneSVG()}</div>`;
+    const role = p.revealedRole ? `<div class="prole">${esc(p.revealedRole)}</div>` : '';
+    return `<div class="${cls.join(' ')}" data-id="${p.id}" onclick="pick('${p.id}')">
+      ${vc}${ally}
+      ${houseSVG(p.name)}
+      ${figure}
+      <div class="house-label">${esc(p.name)}${isMe ? ' (you)' : ''}</div>
       ${role}
     </div>`;
   }).join('');
@@ -218,15 +207,15 @@ function renderGrid() {
 
 function canTarget(p) {
   const phase = state.phase, me = state.me;
+  if (!me.alive) return false;
   if (phase === 'voting') return p.alive && p.id !== myId;
+  if (phase === 'discussion' && me.roleKey === 'Jailor') return p.alive && p.id !== myId; // pick jail target
   if (phase === 'night') {
     const at = me.actionType;
-    if (!me.alive) return false;
-    if (['none','reveal'].includes(at)) return false;
-    if (at === 'alert') return false; // self toggle via button
+    if (at === 'none') return false;
     if (!p.alive) return false;
-    if (at === 'heal' || at === 'watch') return true; // can self-heal? doctor can't self; keep simple: allow others+self for watch
-    if (p.id === myId) return false;
+    if (p.id === myId) return false;        // no self-targeting in this set
+    if (at === 'kill' && me.roleKey === 'Vigilante' && me.bullets <= 0) return false;
     return true;
   }
   return false;
@@ -235,101 +224,62 @@ function canTarget(p) {
 function pick(id) {
   if (!state.me || !state.me.alive) return;
   const phase = state.phase;
-  if (phase === 'voting') {
-    selectedTarget = id;
-    socket.emit('vote', { targetId: id });
-    renderGrid();
-    return;
+  if (phase === 'voting') { selectedTarget = id; socket.emit('vote', { targetId: id }); renderVillage(); return; }
+  if (phase === 'discussion' && state.me.roleKey === 'Jailor') {
+    selectedTarget = id; socket.emit('setJail', { targetId: id }); renderVillage(); return;
   }
   if (phase === 'night') {
     const at = state.me.actionType;
-    if (['none','reveal','alert'].includes(at)) return;
+    if (at === 'none') return;
+    if (at === 'kill' && state.me.bullets <= 0) return;
     selectedTarget = id;
-    if (at === 'jail') return; // jail chosen via action bar confirm? we set immediately:
-    submitNight(at, id);
-    renderGrid();
+    socket.emit('nightAction', { type: at, targetId: id });
+    renderVillage();
   }
-}
-
-function submitNight(type, targetId) {
-  socket.emit('nightAction', { type, targetId });
-  selectedTarget = targetId;
 }
 
 function renderActionBar() {
   const bar = $('#actionBar');
   bar.innerHTML = '';
   const me = state.me;
-  if (!me || !me.alive) { bar.innerHTML = '<span class="hint">You watch from the beyond…</span>'; return; }
+  if (!me || !me.alive) { bar.innerHTML = '<span class="hint">You watch from beyond the veil…</span>'; return; }
   const phase = state.phase;
 
-  if (phase === 'discussion' || phase === 'dayAnnounce') {
-    // Mayor reveal, Jailor jail selection happens during day
-    if (me.roleKey === 'Mayor' && !me.revealed) {
-      bar.innerHTML += `<button class="btn" onclick="dayAct('reveal')">Reveal as Mayor</button>`;
-    }
-    if (me.roleKey === 'Jailor') {
-      bar.innerHTML += `<span class="hint">Click a player to drag them to jail tonight.</span>`;
-      makeJailClickable();
-    }
-  }
-
-  if (phase === 'night') {
+  if (phase === 'discussion') {
+    if (me.roleKey === 'Jailor') bar.innerHTML = '<span class="hint">Click a villager to haul them to jail tonight.</span>';
+  } else if (phase === 'night') {
     const at = me.actionType;
-    if (at === 'alert' && me.roleKey === 'Veteran') {
-      const on = selectedTarget === 'ALERT';
-      bar.innerHTML += `<button class="btn ${on ? 'primary' : ''}" onclick="toggleAlert()">${on ? 'On Alert ✓' : `Go on Alert (${me.alerts} left)`}</button>`;
+    if (me.roleKey === 'Jailor') {
+      bar.innerHTML = `<span class="hint">Speak with your prisoner in chat. ${me.executions > 0 ? '' : 'No executions remain.'}</span>`;
+      if (me.executions > 0 && me.jailTargetId) bar.innerHTML += `<button class="btn primary" onclick="executePrisoner()">Execute Prisoner</button>`;
     } else if (at === 'none') {
-      bar.innerHTML += '<span class="hint">You have no night action. Bide your time.</span>';
-    } else if (me.roleKey === 'Jailor') {
-      // jailor decides execute
-      bar.innerHTML += `<span class="hint">Speak with your prisoner. ${me.executions > 0 ? '' : 'No executions remain.'}</span>`;
-      if (me.executions > 0) bar.innerHTML += `<button class="btn primary" onclick="executePrisoner()">Execute Prisoner</button>`;
-    } else if (at === 'kill' && me.bullets === 0 && me.roleKey === 'Vigilante') {
-      bar.innerHTML += '<span class="hint">You are out of bullets.</span>';
+      bar.innerHTML = me.roleKey === 'Jester'
+        ? '<span class="hint">Scheme quietly. Get the Town to hang you tomorrow.</span>'
+        : '<span class="hint">You have no night action. Rest until dawn.</span>';
+    } else if (at === 'kill' && me.bullets <= 0) {
+      bar.innerHTML = '<span class="hint">You are out of bullets.</span>';
     } else {
-      bar.innerHTML += `<span class="hint">${nightPrompt(at)}</span>`;
-      bar.innerHTML += `<button class="btn ghost tiny" onclick="cancelNight()">Stay home</button>`;
+      bar.innerHTML = `<span class="hint">${nightPrompt(at)}</span>
+        <button class="btn ghost tiny" onclick="cancelNight()">Do nothing</button>`;
     }
+  } else if (phase === 'voting') {
+    bar.innerHTML = '<span class="hint">Click a villager to vote them to trial.</span>';
   }
 }
 
 function nightPrompt(at) {
   return ({
-    investigate: 'Choose someone to investigate.',
-    investigate2: 'Choose someone to gather clues on.',
-    watch: 'Choose a house to watch.',
-    heal: 'Choose someone to heal.',
-    protect: 'Choose someone to guard.',
-    roleblock: 'Choose someone to distract.',
-    frame: 'Choose someone to frame.',
-    kill: 'Choose someone to attack.',
-    mafiakill: 'Choose the Mafia’s victim.'
+    investigate: 'Click someone to investigate.',
+    heal: 'Click someone to protect tonight.',
+    kill: 'Click someone to shoot.',
+    mafiakill: 'Click the Mafia’s victim.'
   })[at] || 'Choose your target.';
 }
 
 window.pick = pick;
 window.judge = v => socket.emit('judge', { verdict: v });
-window.dayAct = kind => socket.emit('dayAction', { kind });
-window.toggleAlert = () => {
-  if (selectedTarget === 'ALERT') { selectedTarget = null; socket.emit('nightAction', { type: 'none', targetId: null }); }
-  else { selectedTarget = 'ALERT'; socket.emit('nightAction', { type: 'alert', targetId: myId }); }
-  renderActionBar();
-};
 window.executePrisoner = () => socket.emit('nightAction', { type: 'execute', targetId: null });
-window.cancelNight = () => { selectedTarget = null; socket.emit('nightAction', { type: 'none', targetId: null }); renderGrid(); };
-
-function makeJailClickable() {
-  // override grid clicks during day for jailor
-  document.querySelectorAll('.pcard').forEach(card => {
-    const id = card.dataset.id;
-    const p = state.players.find(x => x.id === id);
-    if (p && p.alive && id !== myId) {
-      card.classList.add('selectable');
-      card.onclick = () => { selectedTarget = id; socket.emit('setJail', { targetId: id }); document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('selected')); card.classList.add('selected'); };
-    }
-  });
-}
+window.cancelNight = () => { selectedTarget = null; socket.emit('nightAction', { type: 'none', targetId: null }); renderVillage(); };
 
 // ---------- CHAT ----------
 $('#chatForm').addEventListener('submit', e => {
@@ -343,9 +293,7 @@ function addChat({ from, text, channel }) {
   const log = $('#chatLog');
   const div = document.createElement('div');
   div.className = 'chat-msg ' + (channel || 'day');
-  div.innerHTML = (channel === 'system')
-    ? `<span class="sys">${esc(text)}</span>`
-    : `<span class="who">${esc(from)}:</span> ${esc(text)}`;
+  div.innerHTML = (channel === 'system') ? `<span class="sys">${esc(text)}</span>` : `<span class="who">${esc(from)}:</span> ${esc(text)}`;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 }
@@ -363,13 +311,11 @@ function updateChatChannel() {
 // ---------- GAME OVER ----------
 function renderOver() {
   const w = state.winner;
-  $('#winnerTitle').textContent = w === 'Town' ? 'The Town Prevails' :
-    w === 'Mafia' ? 'The Mafia Reigns' :
-    w === 'Serial Killer' ? 'The Killer Stands Alone' : `${w}`;
+  $('#winnerTitle').textContent = w === 'Town' ? 'The Town Prevails' : w === 'Mafia' ? 'The Mafia Reigns' : w;
   $('#winnerMsg').textContent = state.winMessage || '';
   $('#individualWins').innerHTML = (state.individualWins || []).map(t => `<div>${esc(t)}</div>`).join('');
   $('#finalRoles').innerHTML = state.players.map(p =>
     `<div class="fr">${esc(p.name)} — <b>${esc(p.revealedRole || '?')}</b></div>`).join('');
 }
 
-function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
