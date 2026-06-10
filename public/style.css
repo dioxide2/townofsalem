@@ -1,0 +1,168 @@
+/* style.css — gothic / colonial Salem theme for Salem Nights */
+:root {
+  --bg: #0c0910;
+  --bg2: #161020;
+  --panel: #1a1422;
+  --panel2: #221a2e;
+  --gold: #c9a86a;
+  --gold-dim: #8a743f;
+  --blood: #a23b2d;
+  --parchment: #e8dcc0;
+  --text: #d8cfe0;
+  --muted: #8a809a;
+  --town: #c9a86a;
+  --mafia: #d2553f;
+  --neutral: #9a93c2;
+  --border: #3a3048;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'EB Garamond', Georgia, serif;
+  background: radial-gradient(circle at 50% -10%, #1d1530, var(--bg) 70%);
+  color: var(--text);
+  overflow: hidden;
+}
+h1, h2, h3, .game-title, .phase-badge, .btn { font-family: 'Cinzel', serif; }
+
+#fog {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse at 20% 80%, rgba(80,60,110,0.12), transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(120,40,40,0.10), transparent 50%);
+  animation: drift 18s ease-in-out infinite alternate;
+}
+@keyframes drift { from { transform: translate(0,0); } to { transform: translate(-20px,15px); } }
+
+.screen { display: none; position: relative; z-index: 1; height: 100vh; }
+.screen.active { display: block; }
+
+/* buttons */
+.btn {
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+  color: var(--parchment); border: 1px solid var(--gold-dim);
+  padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 0.95rem;
+  letter-spacing: 0.04em; transition: all 0.15s; text-transform: uppercase;
+}
+.btn:hover:not(:disabled) { border-color: var(--gold); box-shadow: 0 0 14px rgba(201,168,106,0.25); transform: translateY(-1px); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary { background: linear-gradient(180deg, #6e2a22, var(--blood)); border-color: var(--blood); color: #f4e6d4; }
+.btn.primary:hover:not(:disabled) { box-shadow: 0 0 18px rgba(162,59,45,0.5); }
+.btn.tiny { padding: 4px 10px; font-size: 0.72rem; }
+.btn.ghost { background: transparent; border-color: var(--border); }
+
+input {
+  background: #0e0a14; border: 1px solid var(--border); color: var(--parchment);
+  padding: 11px 14px; border-radius: 6px; font-family: 'EB Garamond', serif; font-size: 1rem; width: 100%;
+}
+input:focus { outline: none; border-color: var(--gold); }
+label { display:block; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px; }
+
+/* ===== HOME ===== */
+.home-inner { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding: 20px; }
+.title-emblem { width: 110px; height: 110px; margin-bottom: 6px; filter: drop-shadow(0 0 16px rgba(201,168,106,0.3)); }
+.game-title { font-size: 3.4rem; color: var(--gold); letter-spacing: 0.12em; text-shadow: 0 2px 20px rgba(201,168,106,0.35); }
+.tagline { color: var(--muted); font-style: italic; margin-top: 4px; font-size: 1.1rem; }
+.home-card { background: rgba(26,20,34,0.85); border: 1px solid var(--border); border-radius: 12px; padding: 26px; margin-top: 28px; width: 360px; max-width: 92vw; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+.home-actions { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+.join-row { display: flex; gap: 8px; }
+.join-row input { text-transform: uppercase; letter-spacing: 0.3em; text-align: center; }
+.error { color: var(--mafia); min-height: 1.2em; margin-top: 10px; font-size: 0.9rem; }
+.footnote { color: var(--muted); font-size: 0.8rem; margin-top: 22px; max-width: 420px; font-style: italic; }
+
+/* ===== LOBBY ===== */
+.lobby-inner { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding: 20px; text-align:center; }
+.lobby-inner h2 { color: var(--gold); font-size: 2rem; letter-spacing: 0.1em; }
+.room-code-box { margin-top: 14px; font-family:'Cinzel'; font-size: 1.3rem; color: var(--parchment); display:flex; align-items:center; gap:12px; }
+#roomCode { color: var(--gold); letter-spacing: 0.3em; font-size: 1.8rem; }
+.hint { color: var(--muted); font-size: 0.9rem; margin-top: 8px; font-style: italic; }
+.lobby-players { display:flex; flex-wrap:wrap; gap: 14px; justify-content:center; margin: 26px 0; max-width: 700px; }
+.lobby-player { display:flex; flex-direction:column; align-items:center; width: 86px; }
+.lobby-player .avatar-svg { width: 60px; height: 60px; }
+.lobby-player span { margin-top: 4px; font-size: 0.85rem; color: var(--text); }
+.lobby-player .host-tag { color: var(--gold); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; }
+
+/* ===== GAME ===== */
+#gameHeader { display:flex; justify-content:space-between; align-items:center; padding: 12px 22px; border-bottom: 1px solid var(--border); background: rgba(14,10,20,0.7); }
+.phase-info { display:flex; align-items:center; gap: 14px; }
+.phase-badge { background: var(--blood); color:#f4e6d4; padding: 4px 14px; border-radius: 4px; letter-spacing: 0.08em; font-size:0.85rem; }
+.phase-badge.day { background: var(--gold-dim); color:#1a1422; }
+#phaseName { color: var(--muted); font-style: italic; }
+.timer { font-family:'Cinzel'; font-size: 1.8rem; color: var(--gold); min-width: 60px; text-align:right; }
+
+.game-body { display:grid; grid-template-columns: 270px 1fr 300px; height: calc(100vh - 58px); }
+
+.role-panel { background: rgba(20,16,28,0.75); border-right:1px solid var(--border); padding: 18px; overflow-y:auto; }
+.role-emblem-wrap { width: 96px; height: 96px; margin: 0 auto 10px; }
+.role-emblem { width: 100%; height: 100%; }
+#roleName { text-align:center; color: var(--gold); font-size: 1.4rem; }
+.role-team { text-align:center; text-transform:uppercase; letter-spacing:0.12em; font-size:0.72rem; margin: 4px 0 12px; padding: 3px; border-radius: 4px; }
+.role-team.Town { color: var(--town); } .role-team.Mafia { color: var(--mafia); } .role-team.Neutral { color: var(--neutral); }
+.role-summary { font-style: italic; color: var(--parchment); font-size: 0.98rem; line-height:1.4; }
+.role-detail { color: var(--muted); font-size: 0.85rem; margin-top: 10px; line-height: 1.4; }
+.role-stats { margin-top: 14px; display:flex; flex-wrap:wrap; gap:6px; }
+.role-stats .chip { background: #0e0a14; border:1px solid var(--border); border-radius: 12px; padding: 3px 10px; font-size:0.75rem; color: var(--gold); }
+.allies { margin-top:14px; }
+.allies .ally { color: var(--mafia); font-size: 0.85rem; }
+.action-hint { margin-top: 16px; color: var(--gold); font-size: 0.85rem; font-style: italic; }
+
+.board { padding: 18px 22px; overflow-y:auto; display:flex; flex-direction:column; }
+.announce { min-height: 28px; text-align:center; color: var(--parchment); font-size:1.05rem; font-style:italic; margin-bottom: 12px; }
+.announce .death { color: var(--mafia); display:block; }
+
+.player-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap: 14px; margin-top: 6px; }
+.pcard { background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 12px 8px; text-align:center; cursor: default; position:relative; transition: all 0.15s; }
+.pcard.selectable { cursor:pointer; }
+.pcard.selectable:hover { border-color: var(--gold); transform: translateY(-2px); }
+.pcard.selected { border-color: var(--gold); box-shadow: 0 0 14px rgba(201,168,106,0.4); }
+.pcard.dead { opacity: 0.5; }
+.pcard.me { border-color: var(--gold-dim); }
+.pcard .avatar-svg { width: 56px; height: 56px; }
+.pcard .pname { font-size: 0.9rem; margin-top: 4px; color: var(--text); }
+.pcard .prole { font-size: 0.72rem; color: var(--muted); }
+.pcard .badge { position:absolute; top:4px; right:6px; font-size:0.65rem; color: var(--gold); }
+.pcard .votecount { position:absolute; top:4px; left:6px; background:var(--blood); color:#fff; border-radius:10px; padding:0 7px; font-size:0.72rem; }
+.pcard .mayor-star { color: var(--gold); }
+
+.action-bar { margin-top: auto; padding-top: 16px; display:flex; gap: 10px; flex-wrap:wrap; justify-content:center; }
+
+.trial-box { background: rgba(40,20,24,0.6); border:1px solid var(--blood); border-radius:10px; padding:16px; text-align:center; margin-bottom:14px; }
+.trial-box h3 { color: var(--gold); }
+.judgment-btns { display:flex; gap:12px; justify-content:center; margin-top:12px; }
+.judgment-btns .btn { min-width: 110px; }
+.btn.guilty { background: linear-gradient(180deg,#6e2a22,var(--blood)); border-color: var(--blood); }
+.btn.innocent { background: linear-gradient(180deg,#2a4a2a,#3a6a3a); border-color:#3a6a3a; }
+
+.chat-panel { background: rgba(14,10,20,0.8); border-left:1px solid var(--border); display:flex; flex-direction:column; }
+.chat-channel { padding: 10px 14px; border-bottom:1px solid var(--border); color: var(--gold); font-family:'Cinzel'; font-size:0.85rem; letter-spacing:0.06em; }
+.chat-log { flex:1; overflow-y:auto; padding: 12px 14px; display:flex; flex-direction:column; gap:7px; }
+.chat-msg { font-size: 0.92rem; line-height:1.35; }
+.chat-msg .who { color: var(--gold); font-weight:600; }
+.chat-msg.dead .who { color: #8a8; }
+.chat-msg.mafia .who { color: var(--mafia); }
+.chat-msg.system { color: var(--muted); font-style:italic; }
+.chat-msg.jail .who { color: #cba; }
+.chat-form { display:flex; gap:6px; padding: 10px; border-top:1px solid var(--border); }
+.chat-form input { flex:1; }
+
+/* day theme tint */
+body.is-day { background: radial-gradient(circle at 50% -10%, #2a2238, var(--bg2) 70%); }
+
+/* ===== GAME OVER ===== */
+.over-inner { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:20px; }
+#winnerTitle { font-size: 3rem; color: var(--gold); letter-spacing:0.1em; }
+#winnerMsg { color: var(--parchment); font-style:italic; font-size:1.2rem; margin-top:8px; }
+#individualWins { margin-top:14px; color: var(--neutral); }
+.final-roles { margin-top: 24px; display:grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap:8px; max-width:680px; }
+.final-roles .fr { background: var(--panel); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:0.85rem; }
+.final-roles .fr b { color: var(--gold); }
+#overHome { margin-top: 28px; }
+
+.hidden { display:none !important; }
+
+@media (max-width: 920px) {
+  .game-body { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height:auto; }
+  .role-panel, .chat-panel { border:none; border-bottom:1px solid var(--border); }
+  .chat-log { max-height: 220px; }
+}
