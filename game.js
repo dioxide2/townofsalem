@@ -11,6 +11,7 @@ const PHASE_TIMES = {
   defense: 25,
   judgment: 20,
   lastWords: 8,
+  acquitted: 5,
   gameOver: 0
 };
 
@@ -162,6 +163,7 @@ class Game {
       case 'voting': this.tallyNomination(); break;
       case 'defense': this.setPhase('judgment'); break;
       case 'judgment': this.resolveJudgment(); break;
+      case 'acquitted': this.toNight(); break;
       case 'lastWords': this.afterExecution(); break;
       default: break;
     }
@@ -381,8 +383,9 @@ class Game {
       this.guiltyVoters = Object.entries(this.judgment).filter(([, v]) => v === 'guilty').map(([id]) => id);
       this.setPhase('lastWords');
     } else {
+      this.acquittedId = this.onTrial;
       this.onTrial = null;
-      this.toNight();
+      this.setPhase('acquitted');
     }
   }
 
@@ -456,7 +459,7 @@ class Game {
       room: this.room, phase: this.phase, day: this.day, timeLeft: this.timeLeft,
       players: this.publicPlayers(), hostId: this.hostId, started: this.started,
       onTrial: this.onTrial, deaths: this.deaths,
-      trialResult: (this.phase === 'judgment' || this.phase === 'lastWords') ? this.trialResult : null,
+      trialResult: ['judgment', 'lastWords', 'acquitted'].includes(this.phase) ? this.trialResult : null,
       voteTally: this.phase === 'voting' ? this.voteTallyPublic() : null,
       judgmentCount: this.phase === 'judgment' ? Object.keys(this.judgment).length : null,
       winner: this.winner, winMessage: this.winMessage, individualWins: this.individualWins
