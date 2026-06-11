@@ -62,7 +62,7 @@ function render() {
   updateChatChannel();
 }
 
-function isDayPhase(p) { return ['dayAnnounce', 'discussion', 'voting', 'defense', 'judgment', 'lastWords'].includes(p); }
+function isDayPhase(p) { return ['dayAnnounce', 'discussion', 'voting', 'defense', 'judgment', 'lastWords', 'acquitted'].includes(p); }
 function isTrialPhase(p) { return ['defense', 'judgment', 'lastWords'].includes(p); }
 
 function renderLobby() {
@@ -79,7 +79,7 @@ function renderLobby() {
 const PHASE_LABEL = {
   reveal: 'Roles are dealt…', night: 'Night falls — the village sleeps', dayAnnounce: 'Dawn breaks',
   discussion: 'Town discussion', voting: 'Who shall stand trial?', defense: 'The accused speaks',
-  judgment: 'Render your verdict', lastWords: 'Final words'
+  judgment: 'Render your verdict', lastWords: 'Final words', acquitted: 'Found innocent — they walk free'
 };
 function renderHeader() {
   const badge = $('#phaseBadge'), day = isDayPhase(state.phase);
@@ -122,6 +122,13 @@ function renderAnnounce() {
 
 function renderTrial() {
   const box = $('#trialBox');
+  if (state.phase === 'acquitted') {
+    const r = state.trialResult;
+    box.classList.remove('hidden');
+    box.innerHTML = `<h3>${esc(r ? r.name : 'The accused')} was found innocent</h3>` +
+      `<p>The rope is set aside. They walk back to the village. (${r ? r.guilty : 0} guilty / ${r ? r.innocent : 0} innocent)</p>`;
+    return;
+  }
   if (isTrialPhase(state.phase)) {
     const def = state.players.find(p => p.id === state.onTrial);
     if (!def) { box.classList.add('hidden'); return; }

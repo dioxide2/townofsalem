@@ -47,45 +47,56 @@ function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 
 
 function houseSVG(seedName) {
   const h = Math.abs(hashStr(seedName));
-  const roofs = ['#5b3a2e', '#4a3326', '#6b4636', '#3f2d24', '#574033'];
-  const walls = ['#7a6a52', '#857354', '#6f5f49', '#8a7a5e', '#736449'];
+  const roofs = ['#7c3b2d', '#8a4a2e', '#6b4636', '#9a5536', '#5e3a2a'];
+  const walls = ['#cdbf9c', '#d8c9a2', '#c2b288', '#dcd0ad', '#bca57e'];
   const roof = roofs[h % roofs.length];
   const wall = walls[(h >> 3) % walls.length];
-  return `<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" class="house-svg">
-    <rect x="80" y="26" width="12" height="22" fill="${roof}"/>
-    <path d="M16 56 L60 24 L104 56 Z" fill="${roof}"/>
-    <path d="M16 56 L60 24 L104 56 Z" fill="none" stroke="#2a1f18" stroke-width="2"/>
-    <rect x="26" y="56" width="68" height="50" fill="${wall}" stroke="#2a1f18" stroke-width="2"/>
-    <rect x="52" y="78" width="16" height="28" rx="1" fill="#3a2a1e" stroke="#211710" stroke-width="1.5"/>
-    <circle cx="64" cy="92" r="1.6" fill="#d8b25a"/>
-    <rect class="window" x="34" y="66" width="14" height="14" fill="#2a2a32" stroke="#211710" stroke-width="1.5"/>
-    <rect class="window" x="72" y="66" width="14" height="14" fill="#2a2a32" stroke="#211710" stroke-width="1.5"/>
-    <line x1="41" y1="66" x2="41" y2="80" stroke="#211710" stroke-width="1"/>
-    <line x1="79" y1="66" x2="79" y2="80" stroke="#211710" stroke-width="1"/>
+  return `<svg viewBox="0 0 120 124" xmlns="http://www.w3.org/2000/svg" class="house-svg">
+    <ellipse cx="60" cy="116" rx="46" ry="7" fill="rgba(0,0,0,0.28)"/>
+    <rect x="80" y="24" width="13" height="24" fill="#6b6b73" stroke="#2a2a30" stroke-width="1.5"/>
+    <path d="M12 58 L60 22 L108 58 Z" fill="${roof}" stroke="#2a1f18" stroke-width="2.5"/>
+    <path d="M60 22 L108 58 L60 58 Z" fill="rgba(0,0,0,0.12)"/>
+    <rect x="24" y="58" width="72" height="50" fill="${wall}" stroke="#2a1f18" stroke-width="2.5"/>
+    <rect x="51" y="80" width="18" height="28" rx="1" fill="#4a3422" stroke="#241710" stroke-width="2"/>
+    <circle cx="65" cy="94" r="1.8" fill="#e3c067"/>
+    <rect class="window" x="31" y="68" width="15" height="15" fill="#33333c" stroke="#241710" stroke-width="2"/>
+    <rect class="window" x="74" y="68" width="15" height="15" fill="#33333c" stroke="#241710" stroke-width="2"/>
+    <line x1="38.5" y1="68" x2="38.5" y2="83" stroke="#241710" stroke-width="1.2"/>
+    <line x1="31" y1="75.5" x2="46" y2="75.5" stroke="#241710" stroke-width="1.2"/>
+    <line x1="81.5" y1="68" x2="81.5" y2="83" stroke="#241710" stroke-width="1.2"/>
+    <line x1="74" y1="75.5" x2="89" y2="75.5" stroke="#241710" stroke-width="1.2"/>
   </svg>`;
 }
 
-function figureSVG(seedName, opts = {}) {
+// A colonial villager with separate, animatable limbs. Generic on purpose —
+// a player's role is secret, so everyone looks like ordinary townsfolk.
+function figureSVG(seedName) {
   const hue = Math.abs(hashStr(seedName)) % 360;
-  const coat = `hsl(${hue} 30% ${opts.dim ? 26 : 40}%)`;
-  const coatDark = `hsl(${hue} 32% ${opts.dim ? 18 : 28}%)`;
-  const skin = '#caa882';
-  return `<svg viewBox="0 0 48 72" xmlns="http://www.w3.org/2000/svg" class="figure-svg">
-    <ellipse cx="24" cy="15" rx="15" ry="4" fill="${coatDark}"/>
-    <rect x="17" y="3" width="14" height="11" rx="2" fill="${coatDark}"/>
-    <circle cx="24" cy="20" r="8" fill="${skin}"/>
-    <path d="M10 66 q0 -28 14 -28 q14 0 14 28 z" fill="${coat}"/>
-    <path d="M18 40 l6 6 6 -6" fill="none" stroke="${coatDark}" stroke-width="2"/>
-    <path d="M12 48 q-3 8 -1 16" stroke="${coatDark}" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <path d="M36 48 q3 8 1 16" stroke="${coatDark}" stroke-width="4" fill="none" stroke-linecap="round"/>
+  const coat = `hsl(${hue} 36% 44%)`;
+  const coatDark = `hsl(${hue} 40% 31%)`;
+  const skin = '#dcb189';
+  return `<svg viewBox="0 0 40 82" xmlns="http://www.w3.org/2000/svg" class="figure-svg">
+    <ellipse cx="20" cy="80" rx="13" ry="3" fill="rgba(0,0,0,0.30)"/>
+    <g class="limb leg leg-l"><rect x="14.5" y="55" width="5.5" height="21" rx="2.4" fill="${coatDark}"/>
+      <rect x="12.5" y="73" width="9" height="5" rx="2" fill="#241a12"/></g>
+    <g class="limb leg leg-r"><rect x="20" y="55" width="5.5" height="21" rx="2.4" fill="${coatDark}"/>
+      <rect x="18.5" y="73" width="9" height="5" rx="2" fill="#241a12"/></g>
+    <g class="limb arm arm-l"><rect x="6.5" y="33" width="5" height="22" rx="2.5" fill="${coatDark}"/></g>
+    <g class="limb arm arm-r"><rect x="28.5" y="33" width="5" height="22" rx="2.5" fill="${coatDark}"/></g>
+    <path d="M11 57 q-1.5 -29 9 -29 q10.5 0 9 29 z" fill="${coat}" stroke="${coatDark}" stroke-width="1"/>
+    <path d="M14 31 l6 7 6 -7 q-6 -3 -12 0 z" fill="#efe9da"/>
+    <circle cx="20" cy="22" r="7.5" fill="${skin}"/>
+    <ellipse cx="20" cy="14.5" rx="13.5" ry="3.6" fill="#181320"/>
+    <rect x="12.5" y="3" width="15" height="12.5" rx="1.6" fill="#221a28"/>
+    <rect x="16.5" y="10" width="7" height="4.5" fill="#c9a86a"/>
   </svg>`;
 }
 
 function tombstoneSVG() {
-  return `<svg viewBox="0 0 48 72" xmlns="http://www.w3.org/2000/svg" class="tomb-svg">
-    <path d="M12 70 V36 a12 12 0 0 1 24 0 V70 Z" fill="#6a6a72" stroke="#3a3a42" stroke-width="2"/>
-    <path d="M24 44 v12 M18 50 h12" stroke="#3a3a42" stroke-width="2.5" stroke-linecap="round"/>
-    <ellipse cx="24" cy="70" rx="16" ry="3" fill="#1c1626"/>
+  return `<svg viewBox="0 0 40 82" xmlns="http://www.w3.org/2000/svg" class="tomb-svg">
+    <ellipse cx="20" cy="79" rx="14" ry="3" fill="rgba(0,0,0,0.35)"/>
+    <path d="M9 78 V40 a11 11 0 0 1 22 0 V78 Z" fill="#7a7a82" stroke="#3a3a42" stroke-width="2"/>
+    <path d="M20 48 v13 M13.5 54.5 h13" stroke="#3a3a42" stroke-width="2.6" stroke-linecap="round"/>
   </svg>`;
 }
 
