@@ -100,3 +100,15 @@ function avatarToken(seedName, alive) {
     ${alive ? '' : '<line x1="14" y1="14" x2="50" y2="50" stroke="#a23b2d" stroke-width="4"/><line x1="50" y1="14" x2="14" y2="50" stroke="#a23b2d" stroke-width="4"/>'}
   </svg>`;
 }
+
+// central gallows / scaffold for the town square (original art)
+function gallowsSVG() {
+  return `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" class="gallows-svg">
+    <ellipse cx="50" cy="113" rx="32" ry="7" fill="rgba(0,0,0,0.35)"/>
+    <rect x="45" y="18" width="11" height="95" fill="#5a3f2a" stroke="#2e2013" stroke-width="2"/>
+    <rect x="22" y="18" width="40" height="10" fill="#6b4a30" stroke="#2e2013" stroke-width="2"/>
+    <path d="M45 32 L31 19" stroke="#4a3320" stroke-width="4" stroke-linecap="round"/>
+    <line x1="30" y1="28" x2="30" y2="48" stroke="#cbb68a" stroke-width="2"/>
+    <circle cx="30" cy="54" r="6" fill="none" stroke="#cbb68a" stroke-width="2.4"/>
+  </svg>`;
+}
