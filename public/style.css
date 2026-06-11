@@ -229,3 +229,9 @@ body.is-day .house-unit.selectable::before {
 }
 @keyframes voteready { 0%,100% { opacity: 0.35; } 50% { opacity: 0.85; } }
 .house-unit.selected::before { display: none; }
+
+/* host early-night control — large, left sidebar */
+.host-skip-big { width: 100%; margin-top: 18px; padding: 14px 12px; font-size: 0.95rem; line-height: 1.2;
+  border-color: var(--blood); color: #f4d3ca;
+  background: linear-gradient(180deg, #4a1c17, #6e2a22); }
+.host-skip-big:hover:not(:disabled) { box-shadow: 0 0 18px rgba(162,59,45,0.55); border-color: var(--blood); }

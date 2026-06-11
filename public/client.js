@@ -109,6 +109,11 @@ function renderRolePanel() {
     ? '<div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;">Your Family</div>' +
       state.allies.map(a => `<div class="ally">${esc(a.name)} — ${esc(a.role)}${a.alive ? '' : ' (dead)'}</div>`).join('')
     : '';
+  const ah = $('#actionHint');
+  if (state.hostId === myId && ['day', 'dayAnnounce'].includes(state.phase)) {
+    ah.innerHTML = '<button id="hostSkipBtn" class="btn host-skip-big">\u23ED End Day \u2192 Night</button>';
+    $('#hostSkipBtn').onclick = hostSkip;
+  } else { ah.innerHTML = ''; }
   if (me.feedback && me.feedback.length && state.phase === 'dayAnnounce') {
     me.feedback.forEach(f => addChat({ from: 'Whispers', text: f, channel: 'system' }));
     me.feedback = [];
@@ -304,13 +309,6 @@ function renderActionBar() {
     jb.textContent = jailMode ? 'Now click a villager to jail…' : (cur ? `\uD83D\uDD12 Jailing ${cur} (change)` : '\uD83D\uDD12 Choose prisoner to jail');
     jb.onclick = () => { jailMode = !jailMode; renderActionBar(); };
     bar.appendChild(jb);
-  }
-  if (state.hostId === myId && ['day', 'dayAnnounce'].includes(phase)) {
-    const hb = document.createElement('button');
-    hb.className = 'btn tiny'; hb.textContent = '\u23ED End Day \u2192 Night';
-    hb.style.borderColor = 'var(--blood)'; hb.style.color = '#f0c2b6'; hb.style.marginLeft = '8px';
-    hb.onclick = hostSkip;
-    bar.appendChild(hb);
   }
 }
 
