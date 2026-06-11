@@ -53,6 +53,7 @@ function render() {
   document.body.classList.toggle('is-day', day);
   if (prevIsDay !== null && prevIsDay !== day) { const f = $('#phaseFlash'); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash'); }
   prevIsDay = day;
+  if (typeof Music !== 'undefined') { Music.ensureButton(); Music.setMood(day ? 'day' : 'night'); }
   renderHeader();
   renderRolePanel();
   renderAnnounce();
@@ -262,29 +263,42 @@ function pick(id) {
 
 function renderActionBar() {
   const bar = $('#actionBar'); bar.innerHTML = '';
-  const me = state.me;
-  if (!me || !me.alive) { bar.innerHTML = '<span class="hint">You watch from beyond the veil…</span>'; return; }
+  const me = state.me; if (!me) return;
   const phase = state.phase;
-  if (phase === 'discussion') {
-    if (me.roleKey === 'Jailor') bar.innerHTML = '<span class="hint">Click a villager to haul them to jail tonight.</span>';
+  let html = '';
+  if (!me.alive) {
+    html = '<span class="hint">You watch from beyond the veil…</span>';
+  } else if (phase === 'discussion') {
+    html = (me.roleKey === 'Jailor')
+      ? '<span class="hint">Click a villager to haul them to jail tonight.</span>'
+      : '<span class="hint">Debate, accuse, and decide who to put on trial.</span>';
   } else if (phase === 'night') {
     const at = me.actionType;
     if (me.roleKey === 'Jailor') {
-      bar.innerHTML = `<span class="hint">Speak with your prisoner in chat. ${me.executions > 0 ? '' : 'No executions remain.'}</span>`;
-      if (me.executions > 0 && me.jailTargetId) bar.innerHTML += `<button class="btn primary" onclick="executePrisoner()">Execute Prisoner</button>`;
+      html = `<span class="hint">Speak with your prisoner in chat. ${me.executions > 0 ? '' : 'No executions remain.'}</span>`;
+      if (me.executions > 0 && me.jailTargetId) html += `<button class="btn primary" onclick="executePrisoner()">Execute Prisoner</button>`;
     } else if (at === 'none') {
-      bar.innerHTML = me.roleKey === 'Jester'
+      html = me.roleKey === 'Jester'
         ? '<span class="hint">Scheme quietly. Get the Town to hang you tomorrow.</span>'
         : '<span class="hint">You have no night action. Rest until dawn.</span>';
     } else if (at === 'kill' && me.bullets <= 0) {
-      bar.innerHTML = '<span class="hint">You are out of bullets.</span>';
+      html = '<span class="hint">You are out of bullets.</span>';
     } else {
-      bar.innerHTML = `<span class="hint">${nightPrompt(at)}</span><button class="btn ghost tiny" onclick="cancelNight()">Do nothing</button>`;
+      html = `<span class="hint">${nightPrompt(at)}</span><button class="btn ghost tiny" onclick="cancelNight()">Do nothing</button>`;
     }
   } else if (phase === 'voting') {
-    bar.innerHTML = '<span class="hint">Click a villager to vote them to trial.</span>';
+    html = '<span class="hint">Click a villager to vote them to trial.</span>';
+  }
+  bar.innerHTML = html;
+  if (state.hostId === myId && ['discussion', 'voting', 'dayAnnounce'].includes(phase)) {
+    const hb = document.createElement('button');
+    hb.className = 'btn tiny'; hb.textContent = '\u23ED End Day \u2192 Night';
+    hb.style.borderColor = 'var(--blood)'; hb.style.color = '#f0c2b6';
+    hb.onclick = hostSkip;
+    bar.appendChild(hb);
   }
 }
+
 function nightPrompt(at) {
   return ({ investigate: 'Click someone to investigate.', heal: 'Click someone to protect tonight.',
     kill: 'Click someone to shoot.', mafiakill: 'Click the Mafia’s victim.' })[at] || 'Choose your target.';
@@ -294,6 +308,7 @@ window.pick = pick;
 window.judge = v => socket.emit('judge', { verdict: v });
 window.executePrisoner = () => socket.emit('nightAction', { type: 'execute', targetId: null });
 window.cancelNight = () => { selectedTarget = null; socket.emit('nightAction', { type: 'none', targetId: null }); updateScene(); };
+window.hostSkip = () => { if (confirm('End the day immediately and skip straight to night?\n\nThis is a HOST OVERRIDE \u2014 outside the normal game rules. Continue?')) socket.emit('hostSkip'); };
 
 // ---------- CHAT ----------
 $('#chatForm').addEventListener('submit', e => {
@@ -331,3 +346,71 @@ function renderOver() {
 }
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+
+// ---------- Original ambient music (Web Audio API, procedurally generated) ----------
+const Music = (function () {
+  let ctx, master, voices = [], started = false, enabled = false, mood = 'night', bellTimer = null;
+  const CHORDS = { day: [146.83, 220.00, 277.18], night: [98.00, 146.83, 174.61] };
+  function ensureCtx() {
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+  }
+  function buildDrone() {
+    stopVoices();
+    (CHORDS[mood] || CHORDS.night).forEach((f, i) => {
+      const o = ctx.createOscillator(); o.type = i === 0 ? 'sine' : 'triangle'; o.frequency.value = f;
+      const g = ctx.createGain(); g.gain.value = 0;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + 0.025 * i;
+      const lg = ctx.createGain(); lg.gain.value = 3; lfo.connect(lg); lg.connect(o.detune);
+      o.connect(g); g.connect(master); o.start(); lfo.start();
+      g.gain.linearRampToValueAtTime(mood === 'day' ? 0.085 : 0.11, ctx.currentTime + 3);
+      voices.push(o, lfo);
+    });
+    scheduleBell();
+  }
+  function scheduleBell() {
+    clearTimeout(bellTimer);
+    bellTimer = setTimeout(() => { bell(); scheduleBell(); }, (mood === 'day' ? 10000 : 6500) + Math.random() * 7000);
+  }
+  function bell() {
+    if (!ctx || !enabled) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    const base = mood === 'day' ? 523.25 : 196.00;
+    o.frequency.value = base * (Math.random() < 0.5 ? 1 : 1.5);
+    o.connect(g); g.connect(master);
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(mood === 'day' ? 0.05 : 0.08, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (mood === 'day' ? 2.6 : 3.6));
+    o.start(t); o.stop(t + 4);
+  }
+  function stopVoices() { voices.forEach(v => { try { v.stop(); } catch (e) {} try { v.disconnect(); } catch (e) {} }); voices = []; }
+  return {
+    toggle() {
+      ensureCtx();
+      enabled = !enabled;
+      if (enabled) {
+        if (ctx.resume) ctx.resume();
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 1.4);
+        if (!started) { started = true; buildDrone(); }
+      } else {
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+      }
+      return enabled;
+    },
+    setMood(m) { if (m === mood) return; mood = m; if (started && enabled) buildDrone(); },
+    ensureButton() {
+      const hdr = document.getElementById('gameHeader');
+      if (!hdr || document.getElementById('musicBtn')) return;
+      const b = document.createElement('button');
+      b.id = 'musicBtn'; b.className = 'btn tiny'; b.textContent = '\u266A Music: Off'; b.style.marginLeft = '12px';
+      b.onclick = () => { const on = Music.toggle(); b.textContent = on ? '\u266A Music: On' : '\u266A Music: Off'; };
+      const host = hdr.querySelector('.phase-info'); (host || hdr).appendChild(b);
+    }
+  };
+})();
