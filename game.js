@@ -6,8 +6,7 @@ const PHASE_TIMES = {
   reveal: 6,
   night: 35,
   dayAnnounce: 8,
-  discussion: 45,
-  voting: 45,
+  day: 30,
   defense: 25,
   judgment: 20,
   lastWords: 8,
@@ -134,7 +133,7 @@ class Game {
     if (this.timer) clearInterval(this.timer);
 
     if (phase === 'night') this.startNight();
-    if (phase === 'voting') { this.votes = {}; this.lastTrialedToday = new Set(); }
+    if (phase === 'day') { this.votes = {}; this.lastTrialedToday = new Set(); }
 
     this.broadcastState();
 
@@ -156,10 +155,9 @@ class Game {
       case 'night': this.resolveNight(); break;
       case 'dayAnnounce':
         if (this.checkWin()) return;
-        this.setPhase('discussion');
+        this.setPhase('day');
         break;
-      case 'discussion': this.setPhase('voting'); break;
-      case 'voting': this.tallyNomination(); break;
+      case 'day': this.tallyNomination(); break;
       case 'defense': this.setPhase('judgment'); break;
       case 'judgment': this.resolveJudgment(); break;
       case 'acquitted': this.toNight(); break;
@@ -288,7 +286,7 @@ class Game {
       const pl = byId(id);
       if (pl && pl.alive) {
         pl.alive = false;
-        deathAnnings.push({ name: pl.name, role: displayRole(pl.role), reason: pl.deathReason || 'died' });
+        deathAnnings.push({ name: pl.name, reason: pl.deathReason || 'died' });
       }
     });
 
@@ -314,7 +312,7 @@ class Game {
 
   // ---------- DAY: voting / trial ----------
   castVote(voterId, nominatedId) {
-    if (this.phase !== 'voting') return;
+    if (this.phase !== 'day') return;
     const v = this.getPlayer(voterId);
     if (!v || !v.alive) return;
     if (nominatedId === voterId) return;
@@ -393,7 +391,7 @@ class Game {
     if (d && d.alive) {
       d.alive = false;
       d.deathReason = 'was executed by the Town';
-      this.deaths = [{ name: d.name, role: displayRole(d.role), reason: 'was executed by the Town' }];
+      this.deaths = [{ name: d.name, reason: 'was executed by the Town' }];
       if (d.role === 'Jester') {
         d.jesterWon = true;
         // haunt a random guilty voter
@@ -402,7 +400,7 @@ class Game {
           const v = victims[Math.floor(Math.random() * victims.length)];
           v.alive = false;
           v.deathReason = 'was haunted to death by the Jester';
-          this.deaths.push({ name: v.name, role: displayRole(v.role), reason: 'was found dead, haunted by the Jester' });
+          this.deaths.push({ name: v.name, reason: 'was found dead, haunted by the Jester' });
         }
       }
       this.promoteMafia();
@@ -417,7 +415,7 @@ class Game {
 
   hostSkipToNight() {
     if (!this.started) return;
-    if (!['discussion', 'voting', 'dayAnnounce', 'acquitted'].includes(this.phase)) return;
+    if (!['day', 'dayAnnounce', 'acquitted'].includes(this.phase)) return;
     if (this.timer) clearInterval(this.timer);
     this.onTrial = null;
     this.io.to(this.room).emit('chat', { from: 'System', text: 'The host has called for an early nightfall.', channel: 'system' });
@@ -457,7 +455,7 @@ class Game {
     return this.players.map(p => ({
       id: p.id, name: p.name, alive: p.alive, connected: p.connected,
       isHost: p.id === this.hostId,
-      revealedRole: (!p.alive) ? displayRole(p.role) : null
+      revealedRole: (this.phase === 'gameOver') ? displayRole(p.role) : null
     }));
   }
 
@@ -468,7 +466,7 @@ class Game {
       players: this.publicPlayers(), hostId: this.hostId, started: this.started,
       onTrial: this.onTrial, deaths: this.deaths,
       trialResult: ['judgment', 'lastWords', 'acquitted'].includes(this.phase) ? this.trialResult : null,
-      voteTally: this.phase === 'voting' ? this.voteTallyPublic() : null,
+      voteTally: this.phase === 'day' ? this.voteTallyPublic() : null,
       judgmentCount: this.phase === 'judgment' ? Object.keys(this.judgment).length : null,
       winner: this.winner, winMessage: this.winMessage, individualWins: this.individualWins
     };
