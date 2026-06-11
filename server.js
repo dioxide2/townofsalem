@@ -99,6 +99,11 @@ io.on('connection', (socket) => {
     if (r.error) io.to(socket.id).emit('chat', { from: 'System', text: r.error, channel: 'system' });
   });
 
+  socket.on('hostSkip', () => {
+    const game = currentGame(socket);
+    if (game && socket.id === game.hostId) game.hostSkipToNight();
+  });
+
   socket.on('nightAction', ({ type, targetId }) => {
     const game = currentGame(socket);
     if (!game) return;

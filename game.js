@@ -156,8 +156,7 @@ class Game {
       case 'night': this.resolveNight(); break;
       case 'dayAnnounce':
         if (this.checkWin()) return;
-        if (this.day === 1) { this.day++; this.setPhase('night'); } // no trial first day
-        else this.setPhase('discussion');
+        this.setPhase('discussion');
         break;
       case 'discussion': this.setPhase('voting'); break;
       case 'voting': this.tallyNomination(); break;
@@ -415,6 +414,15 @@ class Game {
   }
 
   toNight() { this.day++; this.setPhase('night'); }
+
+  hostSkipToNight() {
+    if (!this.started) return;
+    if (!['discussion', 'voting', 'dayAnnounce', 'acquitted'].includes(this.phase)) return;
+    if (this.timer) clearInterval(this.timer);
+    this.onTrial = null;
+    this.io.to(this.room).emit('chat', { from: 'System', text: 'The host has called for an early nightfall.', channel: 'system' });
+    this.toNight();
+  }
 
   // ---------- WIN CHECK ----------
   checkWin() {
