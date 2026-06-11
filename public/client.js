@@ -6,6 +6,7 @@ let selectedTarget = null;
 let prevIsDay = null;
 let sceneSig = null;
 let prevWalkPhase = null;
+let jailMode = false;
 
 const $ = sel => document.querySelector(sel);
 const screens = { home: $('#home'), lobby: $('#lobby'), game: $('#game'), over: $('#over') };
@@ -53,6 +54,7 @@ function render() {
   document.body.classList.toggle('is-day', day);
   if (prevIsDay !== null && prevIsDay !== day) { const f = $('#phaseFlash'); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash'); }
   prevIsDay = day;
+  if (phase !== 'day') jailMode = false;
   if (typeof Music !== 'undefined') { Music.ensureButton(); Music.setMood(day ? 'day' : 'night'); }
   renderHeader();
   renderRolePanel();
@@ -63,7 +65,7 @@ function render() {
   updateChatChannel();
 }
 
-function isDayPhase(p) { return ['dayAnnounce', 'discussion', 'voting', 'defense', 'judgment', 'lastWords', 'acquitted'].includes(p); }
+function isDayPhase(p) { return ['dayAnnounce', 'day', 'defense', 'judgment', 'lastWords', 'acquitted'].includes(p); }
 function isTrialPhase(p) { return ['defense', 'judgment', 'lastWords'].includes(p); }
 
 function renderLobby() {
@@ -79,7 +81,7 @@ function renderLobby() {
 
 const PHASE_LABEL = {
   reveal: 'Roles are dealt…', night: 'Night falls — the village sleeps', dayAnnounce: 'Dawn breaks',
-  discussion: 'Town discussion', voting: 'Who shall stand trial?', defense: 'The accused speaks',
+  day: 'Town meeting — debate & vote', defense: 'The accused speaks',
   judgment: 'Render your verdict', lastWords: 'Final words', acquitted: 'Found innocent — they walk free'
 };
 function renderHeader() {
@@ -116,9 +118,14 @@ function renderRolePanel() {
 function renderAnnounce() {
   const box = $('#announce');
   if (state.phase === 'dayAnnounce' && state.deaths && state.deaths.length) {
-    box.innerHTML = state.deaths.map(d => `<span class="death">☠ ${esc(d.name)} ${esc(d.reason)}. They were the <b>${esc(d.role)}</b>.</span>`).join('');
-  } else if (state.phase === 'dayAnnounce') { box.innerHTML = '<span>The village awoke to find everyone alive.</span>'; }
-  else { box.innerHTML = ''; }
+    box.innerHTML = state.deaths.map(d => `<span class="death">☠ ${esc(d.name)} ${esc(d.reason)}. Their role remains a mystery…</span>`).join('');
+  } else if (state.phase === 'dayAnnounce') {
+    box.innerHTML = '<span>The village awoke to find everyone alive.</span>';
+  } else if (state.phase === 'day' && state.me && state.me.alive) {
+    box.innerHTML = '<span class="vote-call">\uD83D\uDDF3\uFE0F Click a townsperson\u2019s house to vote them to the gallows \u2014 a majority sends them to trial.</span>';
+  } else if (state.phase === 'day') {
+    box.innerHTML = '<span>The town debates who to send to the gallows…</span>';
+  } else { box.innerHTML = ''; }
 }
 
 function renderTrial() {
@@ -236,8 +243,7 @@ function updateScene() {
 function canTarget(p) {
   const phase = state.phase, me = state.me;
   if (!me.alive) return false;
-  if (phase === 'voting') return p.alive && p.id !== myId;
-  if (phase === 'discussion' && me.roleKey === 'Jailor') return p.alive && p.id !== myId;
+  if (phase === 'day') return p.alive && p.id !== myId;
   if (phase === 'night') {
     const at = me.actionType;
     if (at === 'none') return false;
@@ -251,8 +257,12 @@ function canTarget(p) {
 function pick(id) {
   if (!state.me || !state.me.alive) return;
   const phase = state.phase;
-  if (phase === 'voting') { selectedTarget = id; socket.emit('vote', { targetId: id }); updateScene(); return; }
-  if (phase === 'discussion' && state.me.roleKey === 'Jailor') { selectedTarget = id; socket.emit('setJail', { targetId: id }); updateScene(); return; }
+  if (phase === 'day') {
+    if (state.me.roleKey === 'Jailor' && jailMode) {
+      socket.emit('setJail', { targetId: id }); jailMode = false; renderActionBar(); updateScene(); return;
+    }
+    selectedTarget = id; socket.emit('vote', { targetId: id }); updateScene(); return;
+  }
   if (phase === 'night') {
     const at = state.me.actionType;
     if (at === 'none') return;
@@ -268,10 +278,8 @@ function renderActionBar() {
   let html = '';
   if (!me.alive) {
     html = '<span class="hint">You watch from beyond the veil…</span>';
-  } else if (phase === 'discussion') {
-    html = (me.roleKey === 'Jailor')
-      ? '<span class="hint">Click a villager to haul them to jail tonight.</span>'
-      : '<span class="hint">Debate, accuse, and decide who to put on trial.</span>';
+  } else if (phase === 'day') {
+    html = '<span class="hint">Click a townsperson to vote them onto the stand. A majority sends them to trial.</span>';
   } else if (phase === 'night') {
     const at = me.actionType;
     if (me.roleKey === 'Jailor') {
@@ -286,14 +294,21 @@ function renderActionBar() {
     } else {
       html = `<span class="hint">${nightPrompt(at)}</span><button class="btn ghost tiny" onclick="cancelNight()">Do nothing</button>`;
     }
-  } else if (phase === 'voting') {
-    html = '<span class="hint">Click a villager to vote them to trial.</span>';
   }
   bar.innerHTML = html;
-  if (state.hostId === myId && ['discussion', 'voting', 'dayAnnounce'].includes(phase)) {
+  if (me.alive && me.roleKey === 'Jailor' && phase === 'day') {
+    const cur = me.jailTargetId ? (state.players.find(p => p.id === me.jailTargetId) || {}).name : null;
+    const jb = document.createElement('button');
+    jb.className = 'btn tiny';
+    jb.style.borderColor = 'var(--gold)'; jb.style.marginLeft = '8px';
+    jb.textContent = jailMode ? 'Now click a villager to jail…' : (cur ? `\uD83D\uDD12 Jailing ${cur} (change)` : '\uD83D\uDD12 Choose prisoner to jail');
+    jb.onclick = () => { jailMode = !jailMode; renderActionBar(); };
+    bar.appendChild(jb);
+  }
+  if (state.hostId === myId && ['day', 'dayAnnounce'].includes(phase)) {
     const hb = document.createElement('button');
     hb.className = 'btn tiny'; hb.textContent = '\u23ED End Day \u2192 Night';
-    hb.style.borderColor = 'var(--blood)'; hb.style.color = '#f0c2b6';
+    hb.style.borderColor = 'var(--blood)'; hb.style.color = '#f0c2b6'; hb.style.marginLeft = '8px';
     hb.onclick = hostSkip;
     bar.appendChild(hb);
   }

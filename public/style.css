@@ -219,3 +219,13 @@ body.is-day .fig:not(.walking) .figure-svg { animation: idlesway 3.4s ease-in-ou
   .chat-log { max-height: 200px; }
   #villageScene { min-height: 340px; }
 }
+
+/* day voting prompt + clickable cue */
+.announce .vote-call { color: var(--gold); font-weight: 600; font-style: normal; font-size: 1.06rem; text-shadow: 0 1px 6px rgba(201,168,106,0.45); }
+body.is-day .house-unit.selectable::before {
+  content: ''; position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
+  width: 82%; height: 66%; border: 1px dashed rgba(201,168,106,0.45); border-radius: 10px; pointer-events: none;
+  animation: voteready 2s ease-in-out infinite;
+}
+@keyframes voteready { 0%,100% { opacity: 0.35; } 50% { opacity: 0.85; } }
+.house-unit.selected::before { display: none; }
