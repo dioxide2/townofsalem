@@ -48,17 +48,24 @@ function routeChat(game, fromId, text) {
         .forEach(t => io.to(t.id).emit('chat', { from: p.name, text, channel: 'mafia' }));
       return;
     }
-    // Jailor <-> jailed private chat
-    if (p.role === 'Jailor' || p.jailed) {
-      const jailor = game.players.find(x => x.role === 'Jailor' && x.alive);
-      const jailed = jailor && jailor.jailTargetId ? game.getPlayer(jailor.jailTargetId) : null;
-      if (jailor && jailed) {
-        const fromLabel = p.role === 'Jailor' ? 'Jailor' : p.name;
-        [jailor.id, jailed.id].forEach(id => io.to(id).emit('chat', { from: fromLabel, text, channel: 'jail' }));
+    // Jailor <-> jailed private chat (prisoner identified by the Jailor's chosen target)
+    const jailorPlayer = game.players.find(x => x.role === 'Jailor' && x.alive);
+    const prisonerId = jailorPlayer ? jailorPlayer.jailTargetId : null;
+    if (p.role === 'Jailor' || p.id === prisonerId) {
+      if (jailorPlayer && prisonerId) {
+        const fromLabel = p.role === 'Jailor' ? 'Jailor' : 'Prisoner';
+        [jailorPlayer.id, prisonerId].forEach(id => io.to(id).emit('chat', { from: fromLabel, text, channel: 'jail' }));
       }
       return;
     }
-    // Living non-mafia can't talk publicly at night (Medium handled above as listener)
+    // Living Medium holds a séance with the dead
+    if (p.role === 'Medium') {
+      game.players.forEach(t => {
+        if (!t.alive || t.id === p.id) io.to(t.id).emit('chat', { from: p.name + ' (Medium)', text, channel: 'dead' });
+      });
+      return;
+    }
+    // Other living players cannot speak at night
     io.to(fromId).emit('chat', { from: 'System', text: 'It is night — the town sleeps. You cannot speak now.', channel: 'system' });
     return;
   }
@@ -102,6 +109,11 @@ io.on('connection', (socket) => {
   socket.on('hostSkip', () => {
     const game = currentGame(socket);
     if (game && socket.id === game.hostId) game.hostSkipToNight();
+  });
+
+  socket.on('toggleExecute', () => {
+    const game = currentGame(socket);
+    if (game) game.toggleExecute(socket.id);
   });
 
   socket.on('nightAction', ({ type, targetId }) => {

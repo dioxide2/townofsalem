@@ -4,7 +4,7 @@ const { ROLES, LEVEL } = require('./roles');
 const PHASE_TIMES = {
   lobby: 0,
   reveal: 6,
-  night: 35,
+  night: 39,
   dayAnnounce: 8,
   day: 30,
   defense: 25,
@@ -35,24 +35,24 @@ function mafiaCountFor(n) {
 //   Neutral: 1 Jester only when n >= 9.
 function buildRoleList(n) {
   const mafiaCount = mafiaCountFor(n);
-  const jesterCount = n >= 9 ? 1 : 0;
+  const jesterCount = 1;
   const townCount = n - mafiaCount - jesterCount;
 
   const list = [];
 
-  // Mafia
-  list.push('Godfather');
-  for (let i = 1; i < mafiaCount; i++) list.push('Mafioso');
+  // Mafia: Godfather, Mafioso, Consigliere, then a second Mafioso
+  const mafiaRoles = ['Godfather', 'Mafioso', 'Consigliere', 'Mafioso'];
+  for (let i = 0; i < mafiaCount; i++) list.push(mafiaRoles[i]);
 
-  // Neutral
+  // Neutral: a single Jester occupies what would otherwise be a Villager slot
   for (let i = 0; i < jesterCount; i++) list.push('Jester');
 
-  // Town backbone, then fill with Villagers
-  const backbone = ['Jailor', 'Doctor', 'Investigator', 'Vigilante'];
-  const town = [];
-  for (const r of backbone) { if (town.length < townCount) town.push(r); }
+  // Town: backbone first, then extra unique specials, then Villagers fill the rest
+  const townPool = ['Jailor', 'Doctor', 'Investigator', 'Vigilante', 'Veteran', 'Lookout', 'Tracker', 'Medium'];
+  const specialsCount = townCount <= 4 ? townCount : Math.min(townPool.length, townCount - 1);
+  const town = townPool.slice(0, specialsCount);
   while (town.length < townCount) town.push('Villager');
-  list.push(...town.slice(0, townCount));
+  list.push(...town);
 
   return shuffle(list);
 }
@@ -169,7 +169,7 @@ class Game {
   // ---------- NIGHT ----------
   startNight() {
     this.nightActions = {};
-    this.players.forEach(p => { p.jailed = false; });
+    this.players.forEach(p => { p.jailed = false; p.onAlert = false; });
   }
 
   submitNightAction(playerId, type, targetId) {
@@ -178,6 +178,29 @@ class Game {
     if (p.jailed && p.role !== 'Jailor') return;
     this.nightActions[playerId] = { type, targetId };
     this.io.to(playerId).emit('actionAck', { type, targetId });
+    this.announceAction(p, type, targetId);
+  }
+
+  // Private confirmation of a chosen night action, posted to the right channel.
+  announceAction(p, type, targetId) {
+    const t = targetId ? this.getPlayer(targetId) : null;
+    const tn = t ? t.name : '';
+    const role = displayRole(p.role);
+    const toSelf = (msg) => this.io.to(p.id).emit('chat', { from: 'System', text: msg, channel: 'system' });
+    const toMafia = (msg) => this.players.filter(x => x.team === 'Mafia' && x.alive)
+      .forEach(m => this.io.to(m.id).emit('chat', { from: 'System', text: msg, channel: 'mafia' }));
+    switch (type) {
+      case 'mafiakill': if (t) toMafia(`The ${role} has chosen to kill ${tn}.`); break;
+      case 'kill': if (t) toSelf(`The Vigilante has decided to shoot ${tn}.`); break;
+      case 'heal': if (t) toSelf(`The Doctor will protect ${tn} tonight.`); break;
+      case 'investigate': if (t) toSelf(`The Investigator will investigate ${tn} tonight.`); break;
+      case 'investigateExact': if (t) toSelf(`The Consigliere will examine ${tn}'s role tonight.`); break;
+      case 'watch': if (t) toSelf(`The Lookout will watch ${tn}'s house tonight.`); break;
+      case 'track': if (t) toSelf(`The Tracker will follow ${tn} tonight.`); break;
+      case 'alert': toSelf('The Veteran has decided to go on alert.'); break;
+      case 'none': toSelf('You have decided to do nothing tonight.'); break;
+      default: break;
+    }
   }
 
   // Jailor selects jail target during the DAY (before night).
@@ -186,6 +209,21 @@ class Game {
     if (!j || j.role !== 'Jailor' || !j.alive) return;
     j.jailTargetId = targetId;
     this.io.to(jailorId).emit('jailAck', { targetId });
+  }
+
+  // Jailor toggles the execution of their prisoner during the night.
+  toggleExecute(jailorId) {
+    const j = this.getPlayer(jailorId);
+    if (!j || j.role !== 'Jailor' || !j.alive || this.phase !== 'night') return;
+    if (!j.jailTargetId || j.executions <= 0) return;
+    const prisoner = this.getPlayer(j.jailTargetId);
+    if (!prisoner || !prisoner.alive) return;
+    const armed = this.nightActions[jailorId] && this.nightActions[jailorId].type === 'execute';
+    let msg;
+    if (armed) { delete this.nightActions[jailorId]; msg = 'The Jailor has decided NOT to execute you tonight.'; }
+    else { this.nightActions[jailorId] = { type: 'execute', targetId: null }; msg = 'The Jailor has decided to EXECUTE you at dawn.'; }
+    [j.id, prisoner.id].forEach(id => this.io.to(id).emit('chat', { from: 'System', text: msg, channel: 'jail' }));
+    this.io.to(j.id).emit('executeAck', { armed: !armed });
   }
 
   resolveNight() {
@@ -202,49 +240,71 @@ class Game {
       const jt = byId(jailor.jailTargetId);
       if (jt && jt.alive) { jt.jailed = true; jailedId = jt.id; }
     }
+    const canAct = (pid) => { const p = byId(pid); return p && p.alive && !(p.jailed && p.role !== 'Jailor'); };
 
-    // visits (for potential future features / lookout-style; kept minimal)
-    const blocked = new Set();
-    if (jailedId) blocked.add(jailedId);
-
-    // 1. Doctor heals
-    const healed = {}; // targetId -> healerId
+    // 1. Veteran alert (they stay home, so they do not visit)
+    const onAlert = new Set();
     Object.entries(A).forEach(([pid, act]) => {
       const p = byId(pid);
-      if (!p || !p.alive || blocked.has(pid)) return;
-      if (act.type === 'heal') {
-        const t = byId(act.targetId);
-        if (t && t.alive) healed[t.id] = pid;
+      if (!p || !p.alive) return;
+      if (act.type === 'alert' && p.role === 'Veteran' && p.alerts > 0 && !(p.jailed)) {
+        p.onAlert = true; p.alerts--; onAlert.add(pid);
       }
     });
 
-    // 2. Mafia kill (single kill; Mafioso priority, else Godfather)
+    // 2. Compute visits (actions that travel to a target's house)
+    const VISIT_TYPES = new Set(['heal', 'investigate', 'investigateExact', 'watch', 'track', 'kill', 'mafiakill']);
+    const visits = {};      // targetId -> [visitorId]
+    const visitedBy = {};   // visitorId -> targetId
+    Object.entries(A).forEach(([pid, act]) => {
+      if (!canAct(pid)) return;
+      if (!VISIT_TYPES.has(act.type)) return;
+      const p = byId(pid);
+      if (act.type === 'kill' && p.role === 'Vigilante' && p.bullets <= 0) return;
+      const t = byId(act.targetId);
+      if (!t || !t.alive || act.targetId === pid) return;
+      (visits[act.targetId] = visits[act.targetId] || []).push(pid);
+      visitedBy[pid] = act.targetId;
+    });
+
+    // 3. Veteran kills every visitor; gains Basic defense (applied in defenseOf)
+    onAlert.forEach(vetId => {
+      (visits[vetId] || []).forEach(visId => {
+        const v = byId(visId);
+        if (v && v.alive) this.queueAttack(byId(vetId), v, LEVEL.POWERFUL, 'was cut down by a Veteran on alert');
+      });
+    });
+
+    // 4. Doctor heals
+    const healed = {};
+    Object.entries(A).forEach(([pid, act]) => {
+      if (!canAct(pid)) return;
+      if (act.type === 'heal') { const t = byId(act.targetId); if (t && t.alive) healed[t.id] = pid; }
+    });
+
+    // 5. Mafia kill (one kill; Mafioso priority, else Godfather)
     const mafiaAlive = this.players.filter(p => p.alive && p.team === 'Mafia');
     const gf = mafiaAlive.find(p => p.role === 'Godfather');
     const mafioso = mafiaAlive.find(p => p.role === 'Mafioso');
     const actor = mafioso || gf;
-    if (actor && !blocked.has(actor.id)) {
-      // target: Godfather's order if present, else any mafia order
+    if (actor && canAct(actor.id)) {
       let targetId = (gf && A[gf.id] && A[gf.id].type === 'mafiakill') ? A[gf.id].targetId : null;
-      if (!targetId) {
-        const anyOrder = mafiaAlive.map(m => A[m.id]).find(a => a && a.type === 'mafiakill');
-        if (anyOrder) targetId = anyOrder.targetId;
-      }
+      if (!targetId) { const o = mafiaAlive.map(m => A[m.id]).find(a => a && a.type === 'mafiakill'); if (o) targetId = o.targetId; }
       const t = targetId ? byId(targetId) : null;
       if (t && t.alive) this.queueAttack(actor, t, LEVEL.BASIC, 'was slain by the Mafia');
     }
 
-    // 3. Vigilante
+    // 6. Vigilante
     Object.entries(A).forEach(([pid, act]) => {
+      if (!canAct(pid)) return;
       const p = byId(pid);
-      if (!p || !p.alive || blocked.has(pid)) return;
       if (act.type === 'kill' && p.role === 'Vigilante' && p.bullets > 0) {
         const t = byId(act.targetId);
         if (t && t.alive) { p.bullets--; this.queueAttack(p, t, LEVEL.BASIC, 'was gunned down by a Vigilante'); }
       }
     });
 
-    // 4. Jailor execution
+    // 7. Jailor execution
     if (jailor && jailedId && A[jailor.id] && A[jailor.id].type === 'execute' && jailor.executions > 0) {
       const t = byId(jailedId);
       if (t) {
@@ -254,10 +314,11 @@ class Game {
       }
     }
 
-    // 5. Resolve attacks (defense vs attack; heal grants Basic defense)
+    // 8. Resolve attacks (attack level vs defense; heal & alert grant Basic defense)
     const defenseOf = (pl) => {
       let d = ROLES[pl.role].defense || 0;
       if (healed[pl.id]) d = Math.max(d, LEVEL.BASIC);
+      if (pl.onAlert) d = Math.max(d, LEVEL.BASIC);
       return d;
     };
     const dying = new Set();
@@ -267,32 +328,38 @@ class Game {
       else if (healed[t.id]) pushFeedback(t.id, 'You were attacked in the night, but a Doctor saved you!');
     }
 
-    // 6. Investigator results (Godfather appears innocent)
+    // 9. Investigative results
     Object.entries(A).forEach(([pid, act]) => {
+      if (!canAct(pid)) return;
       const p = byId(pid);
-      if (!p || !p.alive || blocked.has(pid)) return;
-      if (act.type === 'investigate' && p.role === 'Investigator') {
-        const t = byId(act.targetId);
-        if (t) {
-          const suspicious = (t.team === 'Mafia' && t.role !== 'Godfather');
-          pushFeedback(pid, `Your investigation of ${t.name}: they ${suspicious ? 'APPEAR TO WORK WITH THE MAFIA' : 'appear innocent'}.`);
-        }
+      const t = byId(act.targetId);
+      if (act.type === 'investigate' && p.role === 'Investigator' && t) {
+        const suspicious = (t.team === 'Mafia' && t.role !== 'Godfather');
+        pushFeedback(pid, `Your investigation of ${t.name}: they ${suspicious ? 'APPEAR TO WORK WITH THE MAFIA' : 'appear innocent'}.`);
+      }
+      if (act.type === 'investigateExact' && p.role === 'Consigliere' && t) {
+        pushFeedback(pid, `Your investigation of ${t.name}: their exact role is ${displayRole(t.role)}.`);
+      }
+      if (act.type === 'watch' && p.role === 'Lookout' && t) {
+        const vs = (visits[t.id] || []).filter(v => v !== pid).map(v => byId(v)).filter(Boolean).map(v => v.name);
+        pushFeedback(pid, vs.length ? `Visitors to ${t.name}: ${vs.join(', ')}.` : `No one visited ${t.name}.`);
+      }
+      if (act.type === 'track' && p.role === 'Tracker' && t) {
+        const dest = visitedBy[t.id] ? byId(visitedBy[t.id]) : null;
+        pushFeedback(pid, dest ? `${t.name} visited ${dest.name}.` : `${t.name} did not leave home.`);
       }
     });
 
-    // 7. Apply deaths
+    // 10. Apply deaths
     const deathAnnings = [];
     dying.forEach(id => {
       const pl = byId(id);
-      if (pl && pl.alive) {
-        pl.alive = false;
-        deathAnnings.push({ name: pl.name, reason: pl.deathReason || 'died' });
-      }
+      if (pl && pl.alive) { pl.alive = false; deathAnnings.push({ name: pl.name, reason: pl.deathReason || 'died' }); }
     });
 
     this.promoteMafia();
     this.deaths = deathAnnings;
-    this.players.forEach(p => { p.jailTargetId = null; });
+    this.players.forEach(p => { p.jailTargetId = null; p.onAlert = false; });
     this.setPhase('dayAnnounce');
   }
 
@@ -475,7 +542,7 @@ class Game {
         id: me.id, name: me.name, alive: me.alive, role: me.role ? displayRole(me.role) : null,
         roleKey: me.role, team: me.team, summary: me.role ? ROLES[me.role].summary : null,
         detail: me.role ? ROLES[me.role].detail : null,
-        bullets: me.bullets, executions: me.executions,
+        bullets: me.bullets, executions: me.executions, alerts: me.alerts,
         jailTargetId: me.jailTargetId || null,
         actionType: me.role ? ROLES[me.role].actionType : null,
         feedback: (this.nightFeedback && this.nightFeedback[playerId]) || []
