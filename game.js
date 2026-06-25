@@ -81,7 +81,7 @@ class Game {
 
   addPlayer(id, name) {
     if (this.started) return { error: 'Game already in progress.' };
-    if (this.players.length >= 15) return { error: 'Room is full (15 max).' };
+    if (this.players.length >= 17) return { error: 'Room is full (17 max).' };
     if (this.players.some(p => p.name.toLowerCase() === name.toLowerCase()))
       return { error: 'That name is taken in this room.' };
     const p = { id, name, alive: true, role: null, connected: true };
@@ -184,6 +184,15 @@ class Game {
   }
 
   submitNightAction(playerId, type, targetId) {
+    if (type === 'haunt' && this.jesterHaunt && this.jesterHaunt.jesterId === playerId && this.phase === 'night') {
+      if (this.jesterHaunt.voters.includes(targetId)) {
+        this.jesterHaunt.targetId = targetId;
+        const t = this.getPlayer(targetId);
+        this.io.to(playerId).emit('actionAck', { type, targetId });
+        this.io.to(playerId).emit('chat', { from: 'System', text: 'You will drag ' + (t ? t.name : '?') + ' to the grave tonight.', channel: 'dead' });
+      }
+      return;
+    }
     const p = this.getPlayer(playerId);
     if (!p || !p.alive || this.phase !== 'night') return;
     if (p.jailed && p.role !== 'Jailor') return;
@@ -270,20 +279,35 @@ class Game {
       }
     });
 
+    // Determine the single Mafia attacker — only the killer actually visits the victim
+    const mafiaAlive = this.players.filter(p => p.alive && p.team === 'Mafia');
+    const gf = mafiaAlive.find(p => p.role === 'Godfather');
+    const mafioso = mafiaAlive.find(p => p.role === 'Mafioso');
+    const mafiaActor = mafioso || gf;
+    let mafiaTargetId = null;
+    if (mafiaActor && this.day > 1) {
+      mafiaTargetId = (gf && A[gf.id] && A[gf.id].type === 'mafiakill') ? A[gf.id].targetId : null;
+      if (!mafiaTargetId) { const o = mafiaAlive.map(m => A[m.id]).find(a => a && a.type === 'mafiakill'); if (o) mafiaTargetId = o.targetId; }
+    }
+
     // 2. Compute visits (actions that travel to a target's house)
-    const VISIT_TYPES = new Set(['heal', 'investigate', 'investigateExact', 'watch', 'track', 'kill', 'mafiakill']);
+    const VISIT_TYPES = new Set(['heal', 'investigate', 'investigateExact', 'watch', 'track', 'kill']);
     const visits = {};      // targetId -> [visitorId]
     const visitedBy = {};   // visitorId -> targetId
+    const addVisit = (visitorId, targetId) => {
+      const t = byId(targetId);
+      if (!t || !t.alive || targetId === visitorId) return;
+      (visits[targetId] = visits[targetId] || []).push(visitorId);
+      visitedBy[visitorId] = targetId;
+    };
     Object.entries(A).forEach(([pid, act]) => {
       if (!canAct(pid)) return;
       if (!VISIT_TYPES.has(act.type)) return;
       const p = byId(pid);
-      if (act.type === 'kill' && p.role === 'Vigilante' && p.bullets <= 0) return;
-      const t = byId(act.targetId);
-      if (!t || !t.alive || act.targetId === pid) return;
-      (visits[act.targetId] = visits[act.targetId] || []).push(pid);
-      visitedBy[pid] = act.targetId;
+      if (act.type === 'kill' && p.role === 'Vigilante' && (p.bullets <= 0 || this.day <= 1)) return;
+      addVisit(pid, act.targetId);
     });
+    if (mafiaActor && mafiaTargetId && canAct(mafiaActor.id)) addVisit(mafiaActor.id, mafiaTargetId);
 
     // 3. Veteran kills every visitor; gains Basic defense (applied in defenseOf)
     onAlert.forEach(vetId => {
@@ -300,16 +324,23 @@ class Game {
       if (act.type === 'heal') { const t = byId(act.targetId); if (t && t.alive) healed[t.id] = pid; }
     });
 
-    // 5. Mafia kill (one kill; Mafioso priority, else Godfather)
-    const mafiaAlive = this.players.filter(p => p.alive && p.team === 'Mafia');
-    const gf = mafiaAlive.find(p => p.role === 'Godfather');
-    const mafioso = mafiaAlive.find(p => p.role === 'Mafioso');
-    const actor = mafioso || gf;
-    if (actor && canAct(actor.id) && this.day > 1) {
-      let targetId = (gf && A[gf.id] && A[gf.id].type === 'mafiakill') ? A[gf.id].targetId : null;
-      if (!targetId) { const o = mafiaAlive.map(m => A[m.id]).find(a => a && a.type === 'mafiakill'); if (o) targetId = o.targetId; }
-      const t = targetId ? byId(targetId) : null;
-      if (t && t.alive) this.queueAttack(actor, t, LEVEL.BASIC, 'was slain by the Mafia');
+    // 5. Mafia kill
+    if (mafiaActor && canAct(mafiaActor.id) && mafiaTargetId) {
+      const t = byId(mafiaTargetId);
+      if (t && t.alive) this.queueAttack(mafiaActor, t, LEVEL.BASIC, 'was slain by the Mafia');
+    }
+
+    // 5b. Jester's revenge — haunt a chosen guilty voter (or a random one)
+    if (this.jesterHaunt) {
+      const voterPlayers = this.jesterHaunt.voters.map(id => byId(id)).filter(pp => pp && pp.alive);
+      let victim = null;
+      if (this.jesterHaunt.targetId) {
+        const chosen = byId(this.jesterHaunt.targetId);
+        if (chosen && chosen.alive && this.jesterHaunt.voters.includes(chosen.id)) victim = chosen;
+      }
+      if (!victim && voterPlayers.length) victim = voterPlayers[Math.floor(Math.random() * voterPlayers.length)];
+      if (victim) this.queueAttack(byId(this.jesterHaunt.jesterId) || victim, victim, LEVEL.UNSTOPPABLE, 'was dragged to the grave by a vengeful Jester');
+      this.jesterHaunt = null;
     }
 
     // 6. Vigilante
@@ -340,10 +371,11 @@ class Game {
       return d;
     };
     const dying = new Set();
+    const savedByDoc = new Set();
     for (const atk of this._attacks) {
       const t = atk.target;
       if (atk.level > defenseOf(t)) { dying.add(t.id); t.deathReason = atk.reason; }
-      else if (healed[t.id]) pushFeedback(t.id, 'You were attacked in the night, but a Doctor saved you!');
+      else if (healed[t.id]) { pushFeedback(t.id, 'You were attacked in the night, but a Doctor saved you!'); savedByDoc.add(t.id); }
     }
 
     // 9. Investigative results
@@ -390,6 +422,7 @@ class Game {
       }
     });
 
+    this.saves = [...savedByDoc].filter(id => !dying.has(id)).map(id => (byId(id) || {}).name).filter(Boolean);
     this.promoteMafia();
     this.deaths = deathAnnings;
     this.players.forEach(p => { p.jailTargetId = null; p.onAlert = false; });
@@ -496,14 +529,9 @@ class Game {
       this.deaths = [{ name: d.name, reason: 'was executed by the Town' }];
       if (d.role === 'Jester') {
         d.jesterWon = true;
-        // haunt a random guilty voter
-        const victims = (this.guiltyVoters || []).map(id => this.getPlayer(id)).filter(p => p && p.alive);
-        if (victims.length) {
-          const v = victims[Math.floor(Math.random() * victims.length)];
-          v.alive = false;
-          v.deathReason = 'was haunted to death by the Jester';
-          this.deaths.push({ name: v.name, reason: 'was found dead, haunted by the Jester' });
-        }
+        // The Jester takes revenge the FOLLOWING night, choosing a guilty voter to drag down.
+        const voters = (this.guiltyVoters || []).filter(id => this.getPlayer(id));
+        this.jesterHaunt = { jesterId: d.id, voters, targetId: null };
       }
       this.promoteMafia();
     }
@@ -566,7 +594,7 @@ class Game {
     const base = {
       room: this.room, phase: this.phase, day: this.day, timeLeft: this.timeLeft,
       players: this.publicPlayers(), hostId: this.hostId, started: this.started,
-      onTrial: this.onTrial, deaths: this.deaths,
+      onTrial: this.onTrial, deaths: this.deaths, saves: this.saves || [],
       trialResult: ['judgment', 'lastWords', 'acquitted'].includes(this.phase) ? this.trialResult : null,
       voteTally: this.phase === 'day' ? this.voteTallyPublic() : null,
       judgmentCount: this.phase === 'judgment' ? Object.keys(this.judgment).length : null,
@@ -582,6 +610,11 @@ class Game {
         actionType: me.role ? ROLES[me.role].actionType : null,
         feedback: (this.nightFeedback && this.nightFeedback[playerId]) || []
       };
+      if (this.jesterHaunt && this.jesterHaunt.jesterId === playerId) {
+        base.me.canHaunt = true;
+        base.me.hauntVoters = this.jesterHaunt.voters.slice();
+        base.me.hauntTarget = this.jesterHaunt.targetId;
+      }
       if (me.team === 'Mafia') {
         base.allies = this.players.filter(p => p.team === 'Mafia')
           .map(p => ({ name: p.name, role: displayRole(p.role), alive: p.alive }));
