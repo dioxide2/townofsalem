@@ -176,6 +176,7 @@ class Game {
     const p = this.getPlayer(playerId);
     if (!p || !p.alive || this.phase !== 'night') return;
     if (p.jailed && p.role !== 'Jailor') return;
+    if (type === 'mafiakill' && this.day <= 1) return; // Mafia cannot kill the first night
     this.nightActions[playerId] = { type, targetId };
     this.io.to(playerId).emit('actionAck', { type, targetId });
     this.announceAction(p, type, targetId);
@@ -287,7 +288,7 @@ class Game {
     const gf = mafiaAlive.find(p => p.role === 'Godfather');
     const mafioso = mafiaAlive.find(p => p.role === 'Mafioso');
     const actor = mafioso || gf;
-    if (actor && canAct(actor.id)) {
+    if (actor && canAct(actor.id) && this.day > 1) {
       let targetId = (gf && A[gf.id] && A[gf.id].type === 'mafiakill') ? A[gf.id].targetId : null;
       if (!targetId) { const o = mafiaAlive.map(m => A[m.id]).find(a => a && a.type === 'mafiakill'); if (o) targetId = o.targetId; }
       const t = targetId ? byId(targetId) : null;
@@ -380,13 +381,15 @@ class Game {
   // ---------- DAY: voting / trial ----------
   castVote(voterId, nominatedId) {
     if (this.phase !== 'day') return;
+    if (this.day <= 1) return; // no voting on the first day
     const v = this.getPlayer(voterId);
     if (!v || !v.alive) return;
     if (nominatedId === voterId) return;
     const t = this.getPlayer(nominatedId);
     if (!t || !t.alive) return;
     if (this.lastTrialedToday.has(nominatedId)) return;
-    this.votes[voterId] = nominatedId;
+    if (this.votes[voterId] === nominatedId) delete this.votes[voterId]; // click again to unvote
+    else this.votes[voterId] = nominatedId;
     this.checkNominationThreshold();
     this.broadcastState();
   }
