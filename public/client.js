@@ -360,63 +360,60 @@ function renderOver() {
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-
-// ---------- Original ambient music (Web Audio API, procedurally generated) ----------
+// ---------- Background music via the official YouTube IFrame player ----------
+// Audio streams from YouTube (YouTube serves the content under its own licensing);
+// the game does not host or copy the tracks. Day/night tracks set by the user.
 const Music = (function () {
-  let ctx, master, voices = [], started = false, enabled = false, mood = 'night', bellTimer = null;
-  const CHORDS = { day: [146.83, 220.00, 277.18], night: [98.00, 146.83, 174.61] };
-  function ensureCtx() {
-    if (ctx) return;
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+  const DAY_ID = 'QmpLAPJhhBQ';
+  const NIGHT_ID = 'zsSD3XKBr8U';
+  let player = null, ready = false, enabled = false, mood = 'night', apiLoading = false;
+
+  function ensureHost() {
+    if (document.getElementById('ytmusic')) return;
+    const d = document.createElement('div');
+    d.id = 'ytmusic';
+    d.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:200px;height:120px;opacity:0;pointer-events:none;';
+    document.body.appendChild(d);
   }
-  function buildDrone() {
-    stopVoices();
-    (CHORDS[mood] || CHORDS.night).forEach((f, i) => {
-      const o = ctx.createOscillator(); o.type = i === 0 ? 'sine' : 'triangle'; o.frequency.value = f;
-      const g = ctx.createGain(); g.gain.value = 0;
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + 0.025 * i;
-      const lg = ctx.createGain(); lg.gain.value = 3; lfo.connect(lg); lg.connect(o.detune);
-      o.connect(g); g.connect(master); o.start(); lfo.start();
-      g.gain.linearRampToValueAtTime(mood === 'day' ? 0.085 : 0.11, ctx.currentTime + 3);
-      voices.push(o, lfo);
+  function loadApi(cb) {
+    if (window.YT && window.YT.Player) { cb(); return; }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = function () { if (prev) try { prev(); } catch (e) {} cb(); };
+    if (!apiLoading) {
+      apiLoading = true;
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+  }
+  function createPlayer() {
+    player = new YT.Player('ytmusic', {
+      height: '120', width: '200',
+      videoId: mood === 'day' ? DAY_ID : NIGHT_ID,
+      playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, playsinline: 1, rel: 0 },
+      events: {
+        onReady: function (e) { ready = true; e.target.setVolume(40); if (enabled) e.target.playVideo(); },
+        onStateChange: function (e) { if (e.data === YT.PlayerState.ENDED) { e.target.seekTo(0); e.target.playVideo(); } }
+      }
     });
-    scheduleBell();
   }
-  function scheduleBell() {
-    clearTimeout(bellTimer);
-    bellTimer = setTimeout(() => { bell(); scheduleBell(); }, (mood === 'day' ? 10000 : 6500) + Math.random() * 7000);
-  }
-  function bell() {
-    if (!ctx || !enabled) return;
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sine';
-    const base = mood === 'day' ? 523.25 : 196.00;
-    o.frequency.value = base * (Math.random() < 0.5 ? 1 : 1.5);
-    o.connect(g); g.connect(master);
-    const t = ctx.currentTime;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(mood === 'day' ? 0.05 : 0.08, t + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + (mood === 'day' ? 2.6 : 3.6));
-    o.start(t); o.stop(t + 4);
-  }
-  function stopVoices() { voices.forEach(v => { try { v.stop(); } catch (e) {} try { v.disconnect(); } catch (e) {} }); voices = []; }
   return {
     toggle() {
-      ensureCtx();
       enabled = !enabled;
       if (enabled) {
-        if (ctx.resume) ctx.resume();
-        master.gain.cancelScheduledValues(ctx.currentTime);
-        master.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 1.4);
-        if (!started) { started = true; buildDrone(); }
+        ensureHost();
+        if (!player) loadApi(createPlayer);
+        else if (ready) player.playVideo();
       } else {
-        master.gain.cancelScheduledValues(ctx.currentTime);
-        master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+        if (player && ready) player.pauseVideo();
       }
       return enabled;
     },
-    setMood(m) { if (m === mood) return; mood = m; if (started && enabled) buildDrone(); },
+    setMood(m) {
+      if (m === mood) return;
+      mood = m;
+      if (player && ready && enabled) player.loadVideoById(mood === 'day' ? DAY_ID : NIGHT_ID);
+    },
     ensureButton() {
       const hdr = document.getElementById('gameHeader');
       if (!hdr || document.getElementById('musicBtn')) return;
