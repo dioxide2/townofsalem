@@ -41,7 +41,7 @@ function buildRoleList(n) {
   const list = [];
 
   // Mafia: Godfather, Mafioso, Consigliere, then a second Mafioso
-  const mafiaRoles = ['Godfather', 'Mafioso', 'Consigliere', 'Mafioso'];
+  const mafiaRoles = ['Godfather', 'Mafioso', 'Spy', 'Mafioso'];
   for (let i = 0; i < mafiaCount; i++) list.push(mafiaRoles[i]);
 
   // Neutral: a single Jester occupies what would otherwise be a Villager slot
@@ -120,6 +120,7 @@ class Game {
       p.guiltPending = false;
       p.alive = true;
     });
+    this.mafiaTotal = this.players.filter(p => p.team === 'Mafia').length;
     this.started = true;
     this.day = 1;
     this.setPhase('reveal');
@@ -387,8 +388,8 @@ class Game {
         const suspicious = (t.team === 'Mafia' && t.role !== 'Godfather');
         pushFeedback(pid, `Your investigation of ${t.name}: they ${suspicious ? 'APPEAR TO WORK WITH THE MAFIA' : 'appear innocent'}.`);
       }
-      if (act.type === 'investigateExact' && p.role === 'Consigliere' && t) {
-        pushFeedback(pid, `Your investigation of ${t.name}: their exact role is ${displayRole(t.role)}.`);
+      if (act.type === 'investigateExact' && p.role === 'Spy' && t) {
+        pushFeedback(pid, `Your spying reveals ${t.name} is the ${displayRole(t.role)}.`);
       }
       if (act.type === 'watch' && p.role === 'Lookout' && t) {
         const vs = (visits[t.id] || []).filter(v => v !== pid).map(v => byId(v)).filter(Boolean).map(v => v.name);
@@ -427,6 +428,9 @@ class Game {
     this.deaths = deathAnnings;
     this.players.forEach(p => { p.jailTargetId = null; p.onAlert = false; });
     this.setPhase('dayAnnounce');
+    this.deaths.forEach(d => this.io.to(this.room).emit('chat', { from: 'System', text: `\u2620 ${d.name} ${d.reason}.`, channel: 'system' }));
+    this.saves.forEach(n => this.io.to(this.room).emit('chat', { from: 'System', text: `\u2719 ${n} was attacked last night, but saved by the Doctor.`, channel: 'system' }));
+    Object.entries(this.nightFeedback).forEach(([pid, msgs]) => msgs.forEach(m => this.io.to(pid).emit('chat', { from: 'System', text: m, channel: 'system' })));
   }
 
   queueAttack(attacker, target, level, reason) {
@@ -523,13 +527,15 @@ class Game {
 
   afterExecution() {
     const d = this.getPlayer(this.pendingExecution);
+    const msgs = [];
     if (d && d.alive) {
       d.alive = false;
       d.deathReason = 'was executed by the Town';
       this.deaths = [{ name: d.name, reason: 'was executed by the Town' }];
+      msgs.push(`\u2620 ${d.name} was executed by the Town.`);
       if (d.role === 'Jester') {
         d.jesterWon = true;
-        // The Jester takes revenge the FOLLOWING night, choosing a guilty voter to drag down.
+        msgs.push(`\uD83C\uDCCF ${d.name} was the JESTER! They got the hanging they craved \u2014 and will take revenge from the grave tonight.`);
         const voters = (this.guiltyVoters || []).filter(id => this.getPlayer(id));
         this.jesterHaunt = { jesterId: d.id, voters, targetId: null };
       }
@@ -537,8 +543,9 @@ class Game {
     }
     this.onTrial = null;
     this.pendingExecution = null;
-    if (this.checkWin()) return;
+    if (this.checkWin()) { msgs.forEach(m => this.io.to(this.room).emit('chat', { from: 'System', text: m, channel: 'system' })); return; }
     this.toNight();
+    msgs.forEach(m => this.io.to(this.room).emit('chat', { from: 'System', text: m, channel: 'system' }));
   }
 
   toNight() { this.day++; this.setPhase('night'); }
@@ -555,18 +562,11 @@ class Game {
   // ---------- WIN CHECK ----------
   checkWin() {
     const alive = this.alivePlayers();
-    const mafia = alive.filter(p => p.team === 'Mafia');
-    const town = alive.filter(p => p.team === 'Town');
-
-    if (alive.length === 0) { this.endGame('Draw', 'Salem lies empty. No one survived.'); return true; }
-    // Mafia win: mafia >= everyone else and at least one mafia
-    if (mafia.length > 0 && mafia.length >= (alive.length - mafia.length)) {
-      this.endGame('Mafia', 'The Mafia has seized control of Salem.'); return true;
-    }
-    // Town win: no mafia left
-    if (mafia.length === 0) {
-      this.endGame('Town', 'The Town has driven out the Mafia.'); return true;
-    }
+    const mafia = alive.filter(p => p.team === 'Mafia').length;
+    const town = alive.filter(p => p.team === 'Town').length;
+    if (mafia === 0 && town === 0) { this.endGame('Draw', 'Salem lies empty. No side prevailed.'); return true; }
+    if (mafia === 0) { this.endGame('Town', 'The Town has wiped out the Mafia.'); return true; }
+    if (town === 0) { this.endGame('Mafia', 'The Mafia has wiped out the Town.'); return true; }
     return false;
   }
 
@@ -598,7 +598,8 @@ class Game {
       trialResult: ['judgment', 'lastWords', 'acquitted'].includes(this.phase) ? this.trialResult : null,
       voteTally: this.phase === 'day' ? this.voteTallyPublic() : null,
       judgmentCount: this.phase === 'judgment' ? Object.keys(this.judgment).length : null,
-      winner: this.winner, winMessage: this.winMessage, individualWins: this.individualWins
+      winner: this.winner, winMessage: this.winMessage, individualWins: this.individualWins,
+      mafiaTotal: this.mafiaTotal || 0
     };
     if (me) {
       base.me = {

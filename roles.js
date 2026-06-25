@@ -78,11 +78,11 @@ const ROLES = {
     summary: 'You serve the Mafia, striking down its chosen target under cover of night.',
     detail: 'Your faction makes one kill each night. If the Godfather falls, a Mafioso is promoted to take their place.'
   },
-  Consigliere: {
+  Spy: {
     team: 'Mafia', category: 'Support', unique: true,
     actionType: 'investigateExact', target: 'other', defense: LEVEL.NONE,
-    summary: 'Each night, investigate one neighbor to uncover their exact role.',
-    detail: 'You learn precisely what role your target holds. You do not perform the Mafia\'s kill, but you will be promoted to lead if the killers fall.'
+    summary: 'Each night, spy on one neighbor to uncover their exact role.',
+    detail: 'Come morning you learn precisely what role your target holds. You do not perform the Mafia\'s kill, but you are promoted to lead if the killers fall.'
   },
 
   // ---------------- NEUTRAL ----------------
