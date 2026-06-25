@@ -293,6 +293,7 @@ function canTarget(p) {
     const at = me.actionType;
     if (at === 'none' || at === 'alert') return false;
     if (at === 'mafiakill' && state.day <= 1) return false;
+    if (at === 'kill' && state.day <= 1) return false;
     if (!p.alive || p.id === myId) return false;
     if (at === 'kill' && me.roleKey === 'Vigilante' && me.bullets <= 0) return false;
     return true;
@@ -315,8 +316,13 @@ function pick(id) {
     const at = state.me.actionType;
     if (at === 'none' || at === 'alert') return;
     if (at === 'mafiakill' && state.day <= 1) return;
-    if (at === 'kill' && state.me.bullets <= 0) return;
-    selectedTarget = id; socket.emit('nightAction', { type: at, targetId: id }); updateScene();
+    if (at === 'kill' && (state.day <= 1 || state.me.bullets <= 0)) return;
+    if (selectedTarget === id) { // click again to unselect
+      selectedTarget = null; socket.emit('nightAction', { type: 'none', targetId: null });
+    } else {
+      selectedTarget = id; socket.emit('nightAction', { type: at, targetId: id });
+    }
+    updateScene();
   }
 }
 
@@ -337,6 +343,8 @@ function renderActionBar() {
       html = '<span class="hint">Speak with your prisoner in chat, then decide their fate on the left.</span>';
     } else if (at === 'mafiakill' && state.day <= 1) {
       html = '<span class="hint">The Mafia cannot kill on the first night. Plan with your family in chat.</span>';
+    } else if (at === 'kill' && state.day <= 1) {
+      html = '<span class="hint">You cannot shoot on the first night. Hold your fire.</span>';
     } else if (at === 'alert') {
       html = '<span class="hint">Use the panel on the left to go on alert.</span>';
     } else if (at === 'none') {
@@ -388,6 +396,7 @@ function updateChatChannel() {
   else if (state.phase === 'night') {
     if (state.me.team === 'Mafia') ch.textContent = '🗡 Mafia (private)';
     else if (state.me.roleKey === 'Jailor') ch.textContent = '🔒 Jail (private)';
+    else if (state.me.jailed) ch.textContent = '🔒 Jailed — speak with the Jailor';
     else if (state.me.roleKey === 'Medium') ch.textContent = '🔮 Séance with the dead';
     else ch.textContent = '🌙 Night — silence';
   } else ch.textContent = '🏛 Town Square';
