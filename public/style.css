@@ -282,3 +282,6 @@ body.is-day .house-unit.selectable::before {
 .g-role.mafia h4 { color:var(--mafia);} .g-role.neutral h4 { color:var(--neutral);}
 .g-role .g-tag { font-size:.62rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2px 0 5px; }
 .g-role p { font-size:.84rem; margin:0; color:var(--text); }
+
+/* live mafia counter in the header */
+.mafia-count { color: var(--mafia); font-family:'Cinzel', serif; font-size:0.82rem; letter-spacing:0.04em; margin-left:6px; }

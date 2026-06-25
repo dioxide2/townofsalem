@@ -41,7 +41,7 @@ const ICONS = {
     <path d="M30 44 q20 -16 40 0"/>`, 'Mafia'),
   Mafioso: seal(`<path d="M36 30 h28 l-4 14 h-20 z" fill="${PALETTE.Mafia}" stroke="none"/>
     <path d="M50 44 v24"/><path d="M42 56 h16"/><circle cx="50" cy="72" r="3" fill="${PALETTE.Mafia}" stroke="none"/>`, 'Mafia'),
-  Consigliere: seal(`<path d="M30 34 q20 18 40 0 q-20 18 -40 0 z"/><circle cx="50" cy="40" r="6" fill="${PALETTE.Mafia}" stroke="none"/>
+  Spy: seal(`<path d="M30 34 q20 18 40 0 q-20 18 -40 0 z"/><circle cx="50" cy="40" r="6" fill="${PALETTE.Mafia}" stroke="none"/>
     <path d="M34 58 h32 M38 66 h24" stroke="${PALETTE.Mafia}"/>`, 'Mafia'),
   Jester: seal(`<path d="M32 36 q18 -16 36 0 l-6 8 6 6 -10 4 2 10 -10 -4 -10 4 2 -10 -10 -4 6 -6 z"
     fill="${PALETTE.Neutral}" stroke="none"/><circle cx="34" cy="34" r="4" fill="${PALETTE.Neutral}" stroke="none"/>

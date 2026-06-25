@@ -52,7 +52,7 @@ const GUIDE_ROLES = [
   ['Medium','Town','Support','Each night, hold a séance — speak privately with all the dead.'],
   ['Godfather','Mafia','Killing · unique','You lead the Mafia. Order the night kill and appear innocent to the Investigator.'],
   ['Mafioso','Mafia','Killing','You carry out the Mafia’s kill. If the Godfather falls, you are promoted to lead.'],
-  ['Consigliere','Mafia','Support · unique','Each night, uncover a neighbor’s exact role. You don’t kill — but you’re promoted if the killers die.'],
+  ['Spy','Mafia','Support · unique','Each night, spy on a neighbor to learn their exact role. You don’t kill — but you’re promoted if the killers die.'],
   ['Jester','Neutral','Chaos','You crave the noose. Get the Town to hang you to win — then, the next night, drag a guilty voter into the grave with you.']
 ];
 function buildGuide() {
@@ -154,6 +154,9 @@ function renderHeader() {
   badge.classList.toggle('day', day);
   $('#phaseName').textContent = PHASE_LABEL[state.phase] || '';
   $('#timer').textContent = state.timeLeft > 0 ? state.timeLeft : '';
+  let mc = document.getElementById('mafiaCount');
+  if (!mc) { const host = document.querySelector('.phase-info'); if (host) { mc = document.createElement('span'); mc.id = 'mafiaCount'; mc.className = 'mafia-count'; host.appendChild(mc); } }
+  if (mc) mc.textContent = state.mafiaTotal ? ('\uD83D\uDDE1 ' + state.mafiaTotal + ' Mafia in the game') : '';
 }
 
 function renderRolePanel() {
@@ -205,10 +208,6 @@ function renderRolePanel() {
   }
   if (state.hostId === myId && ['day', 'dayAnnounce'].includes(phase)) {
     sideBtn('\u23ED End Day \u2192 Night', hostSkip, 'danger');
-  }
-  if (me.feedback && me.feedback.length && state.phase === 'dayAnnounce') {
-    me.feedback.forEach(f => addChat({ from: 'Whispers', text: f, channel: 'system' }));
-    me.feedback = [];
   }
 }
 
@@ -432,7 +431,7 @@ function renderActionBar() {
 }
 
 function nightPrompt(at) {
-  return ({ investigate: 'Click someone to investigate.', investigateExact: 'Click someone to uncover their exact role.', heal: 'Click someone to protect tonight.',
+  return ({ investigate: 'Click someone to investigate.', investigateExact: 'Click someone to spy on — learn their exact role.', heal: 'Click someone to protect tonight.',
     watch: 'Click a house to watch who visits it.', track: 'Click someone to see where they go.',
     kill: 'Click someone to shoot.', mafiakill: 'Click the Mafia’s victim.' })[at] || 'Choose your target.';
 }
