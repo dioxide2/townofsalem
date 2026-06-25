@@ -248,3 +248,12 @@ body.is-day .house-unit.selectable::before {
 
 /* player's own name under their role title */
 .role-owner { display:block; font-family:'EB Garamond', serif; font-size:0.98rem; color:var(--parchment); font-weight:normal; letter-spacing:normal; text-transform:none; margin-top:3px; }
+
+/* doctor-save dawn notice */
+.announce .save { color: #8fd0a0; display:block; font-style: normal; }
+
+/* gentle death flash — soft red vignette that fades (eye-friendly, peak is partial) */
+#deathFlash { position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(120,15,15,0) 25%, rgba(150,22,22,0.6) 100%); }
+#deathFlash.flash { animation: deathFade 1.7s ease-out; }
+@keyframes deathFade { 0% { opacity: 0; } 16% { opacity: 1; } 100% { opacity: 0; } }

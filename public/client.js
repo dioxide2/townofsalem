@@ -10,6 +10,7 @@ let jailMode = false;
 let executeArmed = false;
 let veteranAlert = false;
 let prevRenderedPhase = null;
+let prevAlive = null;
 
 const $ = sel => document.querySelector(sel);
 const screens = { home: $('#home'), lobby: $('#lobby'), game: $('#game'), over: $('#over') };
@@ -48,15 +49,21 @@ socket.on('chat', msg => addChat(msg));
 socket.on('executeAck', ({ armed }) => { executeArmed = armed; renderRolePanel(); });
 
 // ---------- RENDER ----------
+function triggerDeathFlash() {
+  let el = document.getElementById('deathFlash');
+  if (!el) { el = document.createElement('div'); el.id = 'deathFlash'; document.body.appendChild(el); }
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
 function render() {
   if (!state) return;
+  if (state.me) { if (prevAlive === true && state.me.alive === false) triggerDeathFlash(); prevAlive = state.me.alive; }
   const phase = state.phase;
   if (phase === 'lobby') { renderLobby(); show('lobby'); return; }
   if (phase === 'gameOver') { renderOver(); show('over'); return; }
   show('game');
   const day = isDayPhase(phase);
   document.body.classList.toggle('is-day', day);
-  if (prevIsDay !== null && prevIsDay !== day) { const f = $('#phaseFlash'); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash'); }
+  if (prevIsDay !== null && prevIsDay !== day) { const f = $('#phaseFlash'); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash'); const cl = $('#chatLog'); if (cl) cl.innerHTML = ''; }
   prevIsDay = day;
   if (phase !== prevRenderedPhase) selectedTarget = null;
   if (phase !== 'day') jailMode = false;
@@ -82,7 +89,7 @@ function renderLobby() {
   startBtn.style.display = isHost ? '' : 'none';
   startBtn.disabled = n < 7;
   $('#lobbyHint').textContent = isHost
-    ? (n < 7 ? `Waiting for players… (${n}/7 minimum, 15 max)` : `${n} players ready. You may begin.`)
+    ? (n < 7 ? `Waiting for players… (${n}/7 minimum, 17 max)` : `${n} players ready. You may begin.`)
     : `Waiting for the host to begin… (${n} players)`;
 }
 
@@ -157,10 +164,11 @@ function renderRolePanel() {
 
 function renderAnnounce() {
   const box = $('#announce');
-  if (state.phase === 'dayAnnounce' && state.deaths && state.deaths.length) {
-    box.innerHTML = state.deaths.map(d => `<span class="death">☠ ${esc(d.name)} ${esc(d.reason)}. Their role remains a mystery…</span>`).join('');
-  } else if (state.phase === 'dayAnnounce') {
-    box.innerHTML = '<span>The village awoke to find everyone alive.</span>';
+  if (state.phase === 'dayAnnounce') {
+    let html = '';
+    if (state.deaths && state.deaths.length) html += state.deaths.map(d => `<span class="death">\u2620 ${esc(d.name)} ${esc(d.reason)}. Their role remains a mystery\u2026</span>`).join('');
+    if (state.saves && state.saves.length) html += state.saves.map(n => `<span class="save">\u2719 ${esc(n)} was attacked last night, but saved by the Doctor.</span>`).join('');
+    box.innerHTML = html || '<span>The village awoke to find everyone alive.</span>';
   } else if (state.phase === 'day' && state.day <= 1) {
     box.innerHTML = '<span class="vote-call">\u2600\uFE0F First day \u2014 no trials may be held. Talk and plan; voting opens tomorrow.</span>';
   } else if (state.phase === 'day' && state.me && state.me.alive) {
@@ -214,10 +222,12 @@ function renderVillage() {
 
 function buildScene() {
   const N = state.players.length;
+  const hw = N > 13 ? 11 : (N > 10 ? 12.5 : 14);
+  const fw = N > 13 ? 6 : (N > 10 ? 6.8 : 7.5);
   let html = '<div class="cobble"></div><div class="gallows">' + gallowsSVG() + '</div>';
   state.players.forEach((p, i) => {
     const hp = polar(i, N, HOUSE_R);
-    html += `<div class="house-unit" id="hu-${p.id}" data-id="${p.id}" style="left:${hp.x}%;top:${hp.y}%" onclick="pick('${p.id}')">
+    html += `<div class="house-unit" id="hu-${p.id}" data-id="${p.id}" style="left:${hp.x}%;top:${hp.y}%;width:${hw}%" onclick="pick('${p.id}')">
       <div class="votecount"></div><div class="ally-mark">🗡</div>
       ${houseSVG(p.name)}
       <div class="house-label">${esc(p.name)}${p.id === myId ? ' (you)' : ''}</div>
@@ -226,7 +236,7 @@ function buildScene() {
   });
   state.players.forEach((p, i) => {
     const hp = polar(i, N, FIG_HOME_R);
-    html += `<div class="fig" id="fig-${p.id}" data-id="${p.id}" style="left:${hp.x}%;top:${hp.y}%;opacity:0;transition-delay:${i * 55}ms" onclick="pick('${p.id}')">${figureSVG(p.name)}</div>`;
+    html += `<div class="fig" id="fig-${p.id}" data-id="${p.id}" style="left:${hp.x}%;top:${hp.y}%;width:${fw}%;opacity:0;transition-delay:${i * 55}ms" onclick="pick('${p.id}')">${figureSVG(p.name)}</div>`;
     html += `<div class="tomb-fig" id="tomb-${p.id}" style="left:${hp.x}%;top:${hp.y}%"></div>`;
   });
   $('#village').innerHTML = html;
@@ -246,7 +256,7 @@ function updateScene() {
     const tomb = document.getElementById('tomb-' + p.id);
     if (!hu) return;
 
-    const selectable = state.me.alive && canTarget(p);
+    const selectable = canTarget(p);
     hu.classList.toggle('selectable', selectable);
     hu.classList.toggle('selected', selectedTarget === p.id);
     hu.classList.toggle('dead', !p.alive);
@@ -284,6 +294,7 @@ function updateScene() {
 
 function canTarget(p) {
   const phase = state.phase, me = state.me;
+  if (phase === 'night' && me.canHaunt) return p.alive && (me.hauntVoters || []).includes(p.id);
   if (!me.alive) return false;
   if (phase === 'day') {
     if (me.roleKey === 'Jailor' && jailMode) return p.alive && p.id !== myId;
@@ -302,7 +313,13 @@ function canTarget(p) {
 }
 
 function pick(id) {
-  if (!state.me || !state.me.alive) return;
+  if (!state.me) return;
+  if (!state.me.alive) {
+    if (state.phase === 'night' && state.me.canHaunt && (state.me.hauntVoters || []).includes(id)) {
+      selectedTarget = id; socket.emit('nightAction', { type: 'haunt', targetId: id }); updateScene();
+    }
+    return;
+  }
   const phase = state.phase;
   if (phase === 'day') {
     if (state.me.roleKey === 'Jailor' && jailMode) {
@@ -332,7 +349,9 @@ function renderActionBar() {
   const phase = state.phase;
   let html = '';
   if (!me.alive) {
-    html = '<span class="hint">You watch from beyond the veil\u2026</span>';
+    html = me.canHaunt
+      ? '<span class="hint">\uD83E\uDE78 Vengeance! Click a guilty voter\u2019s house to drag them to the grave \u2014 or one is chosen at random.</span>'
+      : '<span class="hint">You watch from beyond the veil\u2026</span>';
   } else if (phase === 'day') {
     html = state.day <= 1
       ? '<span class="hint">First day: no voting. Discuss and prepare \u2014 trials begin tomorrow.</span>'
