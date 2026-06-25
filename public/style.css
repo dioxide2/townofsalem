@@ -257,3 +257,28 @@ body.is-day .house-unit.selectable::before {
   background: radial-gradient(circle at 50% 50%, rgba(120,15,15,0) 25%, rgba(150,22,22,0.6) 100%); }
 #deathFlash.flash { animation: deathFade 1.7s ease-out; }
 @keyframes deathFade { 0% { opacity: 0; } 16% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ===== How-to-Play modal ===== */
+.modal { position:fixed; inset:0; z-index:80; background:rgba(6,4,12,0.82); display:flex; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto; }
+.modal.hidden { display:none; }
+.modal-card { background:var(--panel); border:1px solid var(--gold-dim); border-radius:14px; max-width:920px; width:100%; padding:20px 24px 36px; position:relative; box-shadow:0 16px 50px rgba(0,0,0,.6); }
+#guideClose { position:absolute; top:14px; right:16px; }
+.g-title { font-family:'Cinzel',serif; color:var(--gold); font-size:1.5rem; letter-spacing:.06em; border-bottom:1px solid var(--border); padding-bottom:8px; margin:6px 0 12px; }
+.g-lead { color:var(--parchment); margin-bottom:12px; }
+.g-teams { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+.g-team { flex:1; min-width:200px; border:1px solid var(--border); border-radius:10px; padding:12px; background:rgba(14,10,20,.5); }
+.g-team h4 { font-family:'Cinzel'; font-size:1rem; margin-bottom:4px; }
+.g-team.town h4 { color:var(--town);} .g-team.mafia h4 { color:var(--mafia);} .g-team.neutral h4 { color:var(--neutral);}
+.g-team p { font-size:.86rem; color:var(--muted); margin:0; }
+.g-cycle { display:flex; gap:10px; flex-wrap:wrap; }
+.g-step { flex:1; min-width:150px; border:1px solid var(--border); border-radius:10px; padding:12px; background:rgba(14,10,20,.5); display:flex; flex-direction:column; gap:5px; }
+.g-step b { color:var(--parchment); font-family:'Cinzel'; font-size:.92rem; }
+.g-step span { font-size:.84rem; color:var(--muted); }
+.g-note { font-size:.86rem; color:var(--gold); font-style:italic; margin:14px 0 4px; }
+.g-role-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:10px; }
+.g-role { display:flex; gap:10px; align-items:flex-start; border:1px solid var(--border); border-radius:10px; padding:10px; background:rgba(14,10,20,.5); }
+.g-role .g-emb { width:46px; height:46px; flex:0 0 46px; }
+.g-role h4 { font-family:'Cinzel'; color:var(--gold); font-size:1rem; }
+.g-role.mafia h4 { color:var(--mafia);} .g-role.neutral h4 { color:var(--neutral);}
+.g-role .g-tag { font-size:.62rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2px 0 5px; }
+.g-role p { font-size:.84rem; margin:0; color:var(--text); }

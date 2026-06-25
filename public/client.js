@@ -39,6 +39,56 @@ $('#leaveBtn').onclick = () => { socket.emit('leaveRoom'); location.reload(); };
 $('#overHome').onclick = () => location.reload();
 $('#startBtn').onclick = () => socket.emit('startGame');
 
+// ---------- How-to-Play guide (home screen modal) ----------
+const GUIDE_ROLES = [
+  ['Villager','Town','Townsfolk','No night power — your weapons are your voice and your vote. Discuss, deduce, and help hang the guilty.'],
+  ['Jailor','Town','Killing · unique','By day, drag a suspect to a private cell. At night you talk with them alone and may execute them. Executing an innocent Townsperson ends your executions.'],
+  ['Investigator','Town','Investigative','Each night, learn whether a neighbor consorts with the Mafia. The Godfather slips by looking innocent.'],
+  ['Doctor','Town','Protective','Each night, heal one person, saving them from a single attack. You cannot heal yourself.'],
+  ['Vigilante','Town','Killing','A villager with a gun — two bullets total (none on night 1). Shoot a fellow Townsperson and guilt claims your own life the next night.'],
+  ['Veteran','Town','Killing · unique','Go on alert up to twice. While on alert you survive a basic attack and kill everyone who visits you that night.'],
+  ['Lookout','Town','Investigative','Each night, watch one house and learn the names of everyone who visited it.'],
+  ['Tracker','Town','Investigative','Each night, follow one neighbor and see whom they visited.'],
+  ['Medium','Town','Support','Each night, hold a séance — speak privately with all the dead.'],
+  ['Godfather','Mafia','Killing · unique','You lead the Mafia. Order the night kill and appear innocent to the Investigator.'],
+  ['Mafioso','Mafia','Killing','You carry out the Mafia’s kill. If the Godfather falls, you are promoted to lead.'],
+  ['Consigliere','Mafia','Support · unique','Each night, uncover a neighbor’s exact role. You don’t kill — but you’re promoted if the killers die.'],
+  ['Jester','Neutral','Chaos','You crave the noose. Get the Town to hang you to win — then, the next night, drag a guilty voter into the grave with you.']
+];
+function buildGuide() {
+  const body = document.getElementById('guideBody');
+  if (!body || body.dataset.built) return;
+  const roleCards = GUIDE_ROLES.map(([name, team, tag, desc]) => {
+    const col = team === 'Mafia' ? 'mafia' : (team === 'Neutral' ? 'neutral' : 'town');
+    return `<div class="g-role ${col}"><div class="g-emb">${emblemFor(name)}</div>` +
+      `<div><h4>${name}</h4><div class="g-tag">${team} · ${tag}</div><p>${desc}</p></div></div>`;
+  }).join('');
+  body.innerHTML =
+    '<h2 class="g-title">How to Play</h2>' +
+    '<p class="g-lead">Salem hides killers among its townsfolk. Each night the wicked strike in secret; each day the village gathers to accuse and hang whoever they believe is guilty.</p>' +
+    '<div class="g-teams">' +
+      '<div class="g-team town"><h4>★ Town</h4><p>The innocent majority. Win by executing every member of the Mafia.</p></div>' +
+      '<div class="g-team mafia"><h4>🗡 Mafia</h4><p>A secret group who kill one victim each night. Win when they equal or outnumber everyone else.</p></div>' +
+      '<div class="g-team neutral"><h4>🃏 Jester</h4><p>Plays for itself. Wins only if the Town votes to hang it.</p></div>' +
+    '</div>' +
+    '<div class="g-cycle">' +
+      '<div class="g-step night"><b>🌙 Night · 39s</b><span>Roles act in secret from the left panel — Mafia choose a victim, Doctor heals, investigators gather clues. Click a house to act; click again to cancel.</span></div>' +
+      '<div class="g-step day"><b>☀ Dawn</b><span>The night’s deaths are announced by name — but roles stay secret. Doctor saves are announced too.</span></div>' +
+      '<div class="g-step day"><b>🏛 Day · 30s</b><span>Debate in the town square. Click a player’s house to vote them onto the stand; click again to unvote. A majority puts them on trial.</span></div>' +
+      '<div class="g-step day"><b>⚖ Trial</b><span>The accused defends themselves; everyone votes Guilty, Innocent, or Abstain. Guilty hangs them.</span></div>' +
+    '</div>' +
+    '<p class="g-note">First night: Mafia &amp; Vigilante cannot kill. First day: no trials — just talk. Roles are only revealed on the final game-over screen.</p>' +
+    '<h2 class="g-title">Roles</h2>' +
+    '<div class="g-role-grid">' + roleCards + '</div>';
+  body.dataset.built = '1';
+}
+const howToBtn = $('#howToBtn');
+if (howToBtn) howToBtn.onclick = () => { buildGuide(); $('#guideModal').classList.remove('hidden'); };
+const guideClose = $('#guideClose');
+if (guideClose) guideClose.onclick = () => $('#guideModal').classList.add('hidden');
+const guideModal = $('#guideModal');
+if (guideModal) guideModal.addEventListener('click', e => { if (e.target === guideModal) guideModal.classList.add('hidden'); });
+
 // ---------- SOCKET ----------
 socket.on('connect', () => { myId = socket.id; });
 socket.on('state', s => { state = s; render(); });

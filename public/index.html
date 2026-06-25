@@ -28,7 +28,8 @@
       </div>
       <p id="homeError" class="error"></p>
     </div>
-    <p class="footnote">An original social-deduction game in the spirit of the Mafia/Werewolf tradition. Play with 7-15 players.</p>
+    <button id="howToBtn" class="btn ghost" style="margin-top:16px;">📖 How to Play &amp; Roles</button>
+    <p class="footnote">An original social-deduction game in the spirit of the Mafia/Werewolf tradition. Play with 7-17 players.</p>
   </div>
 </section>
 
@@ -100,6 +101,13 @@
     <button id="overHome" class="btn primary">Back to Village</button>
   </div>
 </section>
+
+<div id="guideModal" class="modal hidden">
+  <div class="modal-card">
+    <button id="guideClose" class="btn tiny">✕ Close</button>
+    <div id="guideBody"></div>
+  </div>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="art.js"></script>
