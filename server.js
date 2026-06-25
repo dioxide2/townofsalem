@@ -55,6 +55,8 @@ function routeChat(game, fromId, text) {
       if (jailorPlayer && prisonerId) {
         const fromLabel = p.role === 'Jailor' ? 'Jailor' : 'Prisoner';
         [jailorPlayer.id, prisonerId].forEach(id => io.to(id).emit('chat', { from: fromLabel, text, channel: 'jail' }));
+      } else if (p.role === 'Jailor') {
+        io.to(p.id).emit('chat', { from: 'System', text: 'You have no prisoner tonight. Jail someone during the day to interrogate them.', channel: 'system' });
       }
       return;
     }

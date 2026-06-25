@@ -115,7 +115,9 @@ class Game {
       p.role = roleName;
       p.team = def.team;
       p.bullets = def.bullets || 0;
+      p.alerts = def.alerts || 0;
       p.executions = roleName === 'Jailor' ? 1 : 0;
+      p.guiltPending = false;
       p.alive = true;
     });
     this.started = true;
@@ -170,6 +172,15 @@ class Game {
   startNight() {
     this.nightActions = {};
     this.players.forEach(p => { p.jailed = false; p.onAlert = false; });
+    const jailor = this.players.find(p => p.role === 'Jailor' && p.alive);
+    if (jailor && jailor.jailTargetId) {
+      const prisoner = this.getPlayer(jailor.jailTargetId);
+      if (prisoner && prisoner.alive) {
+        prisoner.jailed = true;
+        this.io.to(jailor.id).emit('chat', { from: 'System', text: `You dragged ${prisoner.name} to the cell. Speak with them privately here.`, channel: 'jail' });
+        this.io.to(prisoner.id).emit('chat', { from: 'System', text: 'You have been hauled to jail! You cannot act tonight, but you may speak with the Jailor here.', channel: 'jail' });
+      }
+    }
   }
 
   submitNightAction(playerId, type, targetId) {
@@ -177,6 +188,7 @@ class Game {
     if (!p || !p.alive || this.phase !== 'night') return;
     if (p.jailed && p.role !== 'Jailor') return;
     if (type === 'mafiakill' && this.day <= 1) return; // Mafia cannot kill the first night
+    if (type === 'kill' && this.day <= 1) return; // Vigilante cannot shoot the first night
     this.nightActions[playerId] = { type, targetId };
     this.io.to(playerId).emit('actionAck', { type, targetId });
     this.announceAction(p, type, targetId);
@@ -243,6 +255,11 @@ class Game {
     }
     const canAct = (pid) => { const p = byId(pid); return p && p.alive && !(p.jailed && p.role !== 'Jailor'); };
 
+    // 0b. Vigilante guilt — those who shot a townsperson take their own life tonight
+    this.players.forEach(p => {
+      if (p.alive && p.guiltPending) { this.queueAttack(p, p, LEVEL.UNSTOPPABLE, 'took their own life, wracked with guilt'); p.guiltPending = false; }
+    });
+
     // 1. Veteran alert (they stay home, so they do not visit)
     const onAlert = new Set();
     Object.entries(A).forEach(([pid, act]) => {
@@ -299,7 +316,7 @@ class Game {
     Object.entries(A).forEach(([pid, act]) => {
       if (!canAct(pid)) return;
       const p = byId(pid);
-      if (act.type === 'kill' && p.role === 'Vigilante' && p.bullets > 0) {
+      if (act.type === 'kill' && p.role === 'Vigilante' && p.bullets > 0 && this.day > 1) {
         const t = byId(act.targetId);
         if (t && t.alive) { p.bullets--; this.queueAttack(p, t, LEVEL.BASIC, 'was gunned down by a Vigilante'); }
       }
@@ -356,6 +373,21 @@ class Game {
     dying.forEach(id => {
       const pl = byId(id);
       if (pl && pl.alive) { pl.alive = false; deathAnnings.push({ name: pl.name, reason: pl.deathReason || 'died' }); }
+    });
+
+    // Vigilante: learn the alignment of who you shot; gain guilt if it was Town
+    this.players.forEach(vig => {
+      if (vig.role === 'Vigilante' && A[vig.id] && A[vig.id].type === 'kill') {
+        const target = byId(A[vig.id].targetId);
+        if (target && dying.has(target.id)) {
+          const cat = target.team === 'Town' ? 'Villager' : (target.team === 'Mafia' ? 'Mafia' : 'Jester');
+          pushFeedback(vig.id, `Your shot struck ${target.name} — they were a ${cat}.`);
+          if (target.team === 'Town' && vig.alive) {
+            vig.guiltPending = true;
+            pushFeedback(vig.id, 'You have slain a fellow townsperson. Guilt will claim you the next night.');
+          }
+        }
+      }
     });
 
     this.promoteMafia();
@@ -545,7 +577,7 @@ class Game {
         id: me.id, name: me.name, alive: me.alive, role: me.role ? displayRole(me.role) : null,
         roleKey: me.role, team: me.team, summary: me.role ? ROLES[me.role].summary : null,
         detail: me.role ? ROLES[me.role].detail : null,
-        bullets: me.bullets, executions: me.executions, alerts: me.alerts,
+        bullets: me.bullets, executions: me.executions, alerts: me.alerts, jailed: me.jailed || false,
         jailTargetId: me.jailTargetId || null,
         actionType: me.role ? ROLES[me.role].actionType : null,
         feedback: (this.nightFeedback && this.nightFeedback[playerId]) || []
