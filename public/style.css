@@ -235,3 +235,13 @@ body.is-day .house-unit.selectable::before {
   border-color: var(--blood); color: #f4d3ca;
   background: linear-gradient(180deg, #4a1c17, #6e2a22); }
 .host-skip-big:hover:not(:disabled) { box-shadow: 0 0 18px rgba(162,59,45,0.55); border-color: var(--blood); }
+
+/* Jailor's jail toggle in the left sidebar (gold variant of the host button) */
+.host-skip-big + .host-skip-big { margin-top: 10px; }
+.jail-big { background: linear-gradient(180deg, #4a3a1c, #6e5a22); border-color: var(--gold); color: #f4e6c0; }
+.jail-big:hover:not(:disabled) { box-shadow: 0 0 18px rgba(201,168,106,0.5); border-color: var(--gold); }
+
+/* unified left-sidebar action buttons */
+.side-btn { width: 100%; margin-top: 10px; padding: 12px 10px; font-size: 0.9rem; line-height: 1.2; }
+.side-btn.jail-big { background: linear-gradient(180deg, #4a3a1c, #6e5a22); border-color: var(--gold); color: #f4e6c0; }
+.side-btn.danger { background: linear-gradient(180deg, #4a1c17, #6e2a22); border-color: var(--blood); color: #f4d3ca; }
