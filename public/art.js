@@ -27,11 +27,22 @@ const ICONS = {
     <rect x="26" y="42" width="48" height="16" rx="3" fill="${PALETTE.Town}" stroke="none"/>`, 'Town'),
   Vigilante: seal(`<path d="M30 64 l30 -30 6 -10 -10 6 -30 30 z"/><circle cx="34" cy="62" r="4" fill="${PALETTE.Town}" stroke="none"/>
     <line x1="58" y1="40" x2="70" y2="52"/>`, 'Town'),
+  Veteran: seal(`<path d="M50 22 l22 9 v14 c0 16 -10 27 -22 33 c-12 -6 -22 -17 -22 -33 v-14 z"/>
+    <path d="M50 38 l4.5 9 10 1 -7.3 7 1.8 9.8 -9 -5 -9 5 1.8 -9.8 -7.3 -7 10 -1 z" fill="${PALETTE.Town}" stroke="none"/>`, 'Town'),
+  Lookout: seal(`<path d="M24 50 q26 -22 52 0 q-26 22 -52 0 z"/><circle cx="50" cy="50" r="9" fill="${PALETTE.Town}" stroke="none"/>
+    <circle cx="50" cy="50" r="3.5" fill="#14101a" stroke="none"/>`, 'Town'),
+  Tracker: seal(`<ellipse cx="40" cy="42" rx="6" ry="10" fill="${PALETTE.Town}" stroke="none"/>
+    <ellipse cx="58" cy="58" rx="6" ry="10" fill="${PALETTE.Town}" stroke="none"/>
+    <circle cx="40" cy="30" r="2.5" fill="${PALETTE.Town}" stroke="none"/><circle cx="58" cy="46" r="2.5" fill="${PALETTE.Town}" stroke="none"/>`, 'Town'),
+  Medium: seal(`<circle cx="50" cy="44" r="16"/><path d="M34 66 q16 9 32 0"/>
+    <path d="M44 40 q6 -7 12 0"/>`, 'Town'),
   Godfather: seal(`<path d="M30 44 q20 -16 40 0 l-4 6 h-32 z" fill="${PALETTE.Mafia}" stroke="none"/>
     <rect x="34" y="50" width="32" height="6" fill="${PALETTE.Mafia}" stroke="none"/>
     <path d="M30 44 q20 -16 40 0"/>`, 'Mafia'),
   Mafioso: seal(`<path d="M36 30 h28 l-4 14 h-20 z" fill="${PALETTE.Mafia}" stroke="none"/>
     <path d="M50 44 v24"/><path d="M42 56 h16"/><circle cx="50" cy="72" r="3" fill="${PALETTE.Mafia}" stroke="none"/>`, 'Mafia'),
+  Consigliere: seal(`<path d="M30 34 q20 18 40 0 q-20 18 -40 0 z"/><circle cx="50" cy="40" r="6" fill="${PALETTE.Mafia}" stroke="none"/>
+    <path d="M34 58 h32 M38 66 h24" stroke="${PALETTE.Mafia}"/>`, 'Mafia'),
   Jester: seal(`<path d="M32 36 q18 -16 36 0 l-6 8 6 6 -10 4 2 10 -10 -4 -10 4 2 -10 -10 -4 6 -6 z"
     fill="${PALETTE.Neutral}" stroke="none"/><circle cx="34" cy="34" r="4" fill="${PALETTE.Neutral}" stroke="none"/>
     <circle cx="66" cy="34" r="4" fill="${PALETTE.Neutral}" stroke="none"/>`, 'Neutral')
@@ -71,9 +82,10 @@ function houseSVG(seedName) {
 // A colonial villager with separate, animatable limbs. Generic on purpose —
 // a player's role is secret, so everyone looks like ordinary townsfolk.
 function figureSVG(seedName) {
-  const hue = Math.abs(hashStr(seedName)) % 360;
-  const coat = `hsl(${hue} 36% 44%)`;
-  const coatDark = `hsl(${hue} 40% 31%)`;
+  // All townsfolk share one colonial colour scheme — roles are secret, so
+  // everyone looks alike; names below the houses tell them apart.
+  const coat = '#7a6248';
+  const coatDark = '#54422f';
   const skin = '#dcb189';
   return `<svg viewBox="0 0 40 82" xmlns="http://www.w3.org/2000/svg" class="figure-svg">
     <ellipse cx="20" cy="80" rx="13" ry="3" fill="rgba(0,0,0,0.30)"/>

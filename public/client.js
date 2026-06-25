@@ -7,6 +7,9 @@ let prevIsDay = null;
 let sceneSig = null;
 let prevWalkPhase = null;
 let jailMode = false;
+let executeArmed = false;
+let veteranAlert = false;
+let prevRenderedPhase = null;
 
 const $ = sel => document.querySelector(sel);
 const screens = { home: $('#home'), lobby: $('#lobby'), game: $('#game'), over: $('#over') };
@@ -42,6 +45,7 @@ socket.on('tick', ({ timeLeft, phase }) => { if (state) { state.timeLeft = timeL
 socket.on('actionAck', ({ targetId }) => { selectedTarget = targetId; updateScene(); });
 socket.on('jailAck', ({ targetId }) => { selectedTarget = targetId; updateScene(); });
 socket.on('chat', msg => addChat(msg));
+socket.on('executeAck', ({ armed }) => { executeArmed = armed; renderRolePanel(); });
 
 // ---------- RENDER ----------
 function render() {
@@ -54,7 +58,10 @@ function render() {
   document.body.classList.toggle('is-day', day);
   if (prevIsDay !== null && prevIsDay !== day) { const f = $('#phaseFlash'); f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash'); }
   prevIsDay = day;
+  if (phase !== prevRenderedPhase) selectedTarget = null;
   if (phase !== 'day') jailMode = false;
+  if (phase === 'night' && prevRenderedPhase !== 'night') { executeArmed = false; veteranAlert = false; }
+  prevRenderedPhase = phase;
   if (typeof Music !== 'undefined') { Music.ensureButton(); Music.setMood(day ? 'day' : 'night'); }
   renderHeader();
   renderRolePanel();
@@ -96,13 +103,14 @@ function renderRolePanel() {
   const me = state.me;
   if (!me || !me.roleKey) return;
   $('#roleEmblem').innerHTML = emblemFor(me.roleKey);
-  $('#roleName').textContent = me.role;
+  $('#roleName').innerHTML = esc(me.role) + '<span class="role-owner">' + esc(me.name) + '</span>';
   const team = $('#roleTeam'); team.textContent = me.team; team.className = 'role-team ' + me.team;
   $('#roleSummary').textContent = me.summary || '';
   $('#roleDetail').textContent = me.detail || '';
   const stats = [];
   if (me.roleKey === 'Vigilante') stats.push(`Bullets: ${me.bullets}`);
   if (me.roleKey === 'Jailor') stats.push(`Executions: ${me.executions}`);
+  if (me.roleKey === 'Veteran') stats.push(`Alerts: ${me.alerts}`);
   if (!me.alive) stats.push('Deceased');
   $('#roleStats').innerHTML = stats.map(s => `<span class="chip">${esc(s)}</span>`).join('');
   $('#allies').innerHTML = (state.allies && me.team === 'Mafia')
@@ -110,10 +118,37 @@ function renderRolePanel() {
       state.allies.map(a => `<div class="ally">${esc(a.name)} — ${esc(a.role)}${a.alive ? '' : ' (dead)'}</div>`).join('')
     : '';
   const ah = $('#actionHint');
-  if (state.hostId === myId && ['day', 'dayAnnounce'].includes(state.phase)) {
-    ah.innerHTML = '<button id="hostSkipBtn" class="btn host-skip-big">\u23ED End Day \u2192 Night</button>';
-    $('#hostSkipBtn').onclick = hostSkip;
-  } else { ah.innerHTML = ''; }
+  ah.innerHTML = '';
+  const phase = state.phase;
+  const sideBtn = (text, onclick, variant, disabled) => {
+    const b = document.createElement('button');
+    b.className = 'btn side-btn' + (variant ? ' ' + variant : '');
+    b.textContent = text; if (disabled) b.disabled = true; b.onclick = onclick;
+    ah.appendChild(b);
+  };
+  if (me.alive && phase === 'day' && me.roleKey === 'Jailor') {
+    const cur = me.jailTargetId ? (state.players.find(p => p.id === me.jailTargetId) || {}).name : null;
+    sideBtn(jailMode ? 'Now click a villager to jail\u2026' : (cur ? '\uD83D\uDD12 Jailing ' + cur + ' (change)' : '\uD83D\uDD12 Choose prisoner to jail'),
+      () => { jailMode = !jailMode; renderRolePanel(); updateScene(); }, 'jail-big');
+  }
+  if (me.alive && phase === 'night') {
+    if (me.roleKey === 'Jailor' && me.executions > 0 && me.jailTargetId) {
+      sideBtn(executeArmed ? '\u2713 Execution armed \u2014 cancel' : 'Execute Prisoner',
+        () => { executeArmed = !executeArmed; socket.emit('toggleExecute'); renderRolePanel(); }, executeArmed ? 'guilty' : '');
+    }
+    if (me.roleKey === 'Veteran') {
+      const noneLeft = (me.alerts || 0) <= 0 && !veteranAlert;
+      sideBtn(noneLeft ? 'No alerts remaining' : (veteranAlert ? '\u2713 On Alert (stand down)' : 'Go on Alert (' + (me.alerts || 0) + ' left)'),
+        () => { veteranAlert = !veteranAlert; socket.emit('nightAction', { type: veteranAlert ? 'alert' : 'none', targetId: myId }); renderRolePanel(); },
+        veteranAlert ? 'primary' : '', noneLeft);
+    }
+    if (!['none', 'alert'].includes(me.actionType) && me.roleKey !== 'Jailor' && !(me.actionType === 'kill' && me.bullets <= 0)) {
+      sideBtn('Do nothing tonight', () => { selectedTarget = null; socket.emit('nightAction', { type: 'none', targetId: null }); updateScene(); renderRolePanel(); }, 'ghost');
+    }
+  }
+  if (state.hostId === myId && ['day', 'dayAnnounce'].includes(phase)) {
+    sideBtn('\u23ED End Day \u2192 Night', hostSkip, 'danger');
+  }
   if (me.feedback && me.feedback.length && state.phase === 'dayAnnounce') {
     me.feedback.forEach(f => addChat({ from: 'Whispers', text: f, channel: 'system' }));
     me.feedback = [];
@@ -126,6 +161,8 @@ function renderAnnounce() {
     box.innerHTML = state.deaths.map(d => `<span class="death">☠ ${esc(d.name)} ${esc(d.reason)}. Their role remains a mystery…</span>`).join('');
   } else if (state.phase === 'dayAnnounce') {
     box.innerHTML = '<span>The village awoke to find everyone alive.</span>';
+  } else if (state.phase === 'day' && state.day <= 1) {
+    box.innerHTML = '<span class="vote-call">\u2600\uFE0F First day \u2014 no trials may be held. Talk and plan; voting opens tomorrow.</span>';
   } else if (state.phase === 'day' && state.me && state.me.alive) {
     box.innerHTML = '<span class="vote-call">\uD83D\uDDF3\uFE0F Click a townsperson\u2019s house to vote them to the gallows \u2014 a majority sends them to trial.</span>';
   } else if (state.phase === 'day') {
@@ -215,7 +252,7 @@ function updateScene() {
     hu.classList.toggle('dead', !p.alive);
     hu.classList.toggle('me', p.id === myId);
     const vc = hu.querySelector('.votecount');
-    if (state.phase === 'voting' && tally[p.id]) { vc.textContent = tally[p.id]; vc.style.display = 'block'; } else vc.style.display = 'none';
+    if (state.phase === 'day' && tally[p.id]) { vc.textContent = tally[p.id]; vc.style.display = 'block'; } else vc.style.display = 'none';
     const am = hu.querySelector('.ally-mark');
     am.style.display = (state.me.team === 'Mafia' && p.alive && allyNames.has(p.name) && p.id !== myId) ? 'block' : 'none';
     hu.querySelector('.prole').textContent = p.revealedRole || '';
@@ -248,10 +285,14 @@ function updateScene() {
 function canTarget(p) {
   const phase = state.phase, me = state.me;
   if (!me.alive) return false;
-  if (phase === 'day') return p.alive && p.id !== myId;
+  if (phase === 'day') {
+    if (me.roleKey === 'Jailor' && jailMode) return p.alive && p.id !== myId;
+    return state.day > 1 && p.alive && p.id !== myId;
+  }
   if (phase === 'night') {
     const at = me.actionType;
-    if (at === 'none') return false;
+    if (at === 'none' || at === 'alert') return false;
+    if (at === 'mafiakill' && state.day <= 1) return false;
     if (!p.alive || p.id === myId) return false;
     if (at === 'kill' && me.roleKey === 'Vigilante' && me.bullets <= 0) return false;
     return true;
@@ -264,13 +305,16 @@ function pick(id) {
   const phase = state.phase;
   if (phase === 'day') {
     if (state.me.roleKey === 'Jailor' && jailMode) {
-      socket.emit('setJail', { targetId: id }); jailMode = false; renderActionBar(); updateScene(); return;
+      socket.emit('setJail', { targetId: id }); jailMode = false; renderRolePanel(); updateScene(); return;
     }
-    selectedTarget = id; socket.emit('vote', { targetId: id }); updateScene(); return;
+    if (state.day <= 1) return; // no voting on the first day
+    selectedTarget = (selectedTarget === id) ? null : id; // toggle vote / unvote
+    socket.emit('vote', { targetId: id }); updateScene(); return;
   }
   if (phase === 'night') {
     const at = state.me.actionType;
-    if (at === 'none') return;
+    if (at === 'none' || at === 'alert') return;
+    if (at === 'mafiakill' && state.day <= 1) return;
     if (at === 'kill' && state.me.bullets <= 0) return;
     selectedTarget = id; socket.emit('nightAction', { type: at, targetId: id }); updateScene();
   }
@@ -282,38 +326,37 @@ function renderActionBar() {
   const phase = state.phase;
   let html = '';
   if (!me.alive) {
-    html = '<span class="hint">You watch from beyond the veil…</span>';
+    html = '<span class="hint">You watch from beyond the veil\u2026</span>';
   } else if (phase === 'day') {
-    html = '<span class="hint">Click a townsperson to vote them onto the stand. A majority sends them to trial.</span>';
+    html = state.day <= 1
+      ? '<span class="hint">First day: no voting. Discuss and prepare \u2014 trials begin tomorrow.</span>'
+      : '<span class="hint">Click a townsperson to vote them onto the stand. A majority sends them to trial.</span>';
   } else if (phase === 'night') {
     const at = me.actionType;
     if (me.roleKey === 'Jailor') {
-      html = `<span class="hint">Speak with your prisoner in chat. ${me.executions > 0 ? '' : 'No executions remain.'}</span>`;
-      if (me.executions > 0 && me.jailTargetId) html += `<button class="btn primary" onclick="executePrisoner()">Execute Prisoner</button>`;
+      html = '<span class="hint">Speak with your prisoner in chat, then decide their fate on the left.</span>';
+    } else if (at === 'mafiakill' && state.day <= 1) {
+      html = '<span class="hint">The Mafia cannot kill on the first night. Plan with your family in chat.</span>';
+    } else if (at === 'alert') {
+      html = '<span class="hint">Use the panel on the left to go on alert.</span>';
     } else if (at === 'none') {
       html = me.roleKey === 'Jester'
         ? '<span class="hint">Scheme quietly. Get the Town to hang you tomorrow.</span>'
-        : '<span class="hint">You have no night action. Rest until dawn.</span>';
+        : (me.roleKey === 'Medium'
+          ? '<span class="hint">Hold a s\u00e9ance \u2014 speak with the dead in the chat panel.</span>'
+          : '<span class="hint">You have no night action. Rest until dawn.</span>');
     } else if (at === 'kill' && me.bullets <= 0) {
       html = '<span class="hint">You are out of bullets.</span>';
     } else {
-      html = `<span class="hint">${nightPrompt(at)}</span><button class="btn ghost tiny" onclick="cancelNight()">Do nothing</button>`;
+      html = '<span class="hint">' + nightPrompt(at) + ' (use the panel on the left to skip)</span>';
     }
   }
   bar.innerHTML = html;
-  if (me.alive && me.roleKey === 'Jailor' && phase === 'day') {
-    const cur = me.jailTargetId ? (state.players.find(p => p.id === me.jailTargetId) || {}).name : null;
-    const jb = document.createElement('button');
-    jb.className = 'btn tiny';
-    jb.style.borderColor = 'var(--gold)'; jb.style.marginLeft = '8px';
-    jb.textContent = jailMode ? 'Now click a villager to jail…' : (cur ? `\uD83D\uDD12 Jailing ${cur} (change)` : '\uD83D\uDD12 Choose prisoner to jail');
-    jb.onclick = () => { jailMode = !jailMode; renderActionBar(); };
-    bar.appendChild(jb);
-  }
 }
 
 function nightPrompt(at) {
-  return ({ investigate: 'Click someone to investigate.', heal: 'Click someone to protect tonight.',
+  return ({ investigate: 'Click someone to investigate.', investigateExact: 'Click someone to uncover their exact role.', heal: 'Click someone to protect tonight.',
+    watch: 'Click a house to watch who visits it.', track: 'Click someone to see where they go.',
     kill: 'Click someone to shoot.', mafiakill: 'Click the Mafia’s victim.' })[at] || 'Choose your target.';
 }
 
@@ -345,6 +388,7 @@ function updateChatChannel() {
   else if (state.phase === 'night') {
     if (state.me.team === 'Mafia') ch.textContent = '🗡 Mafia (private)';
     else if (state.me.roleKey === 'Jailor') ch.textContent = '🔒 Jail (private)';
+    else if (state.me.roleKey === 'Medium') ch.textContent = '🔮 Séance with the dead';
     else ch.textContent = '🌙 Night — silence';
   } else ch.textContent = '🏛 Town Square';
 }
@@ -360,66 +404,104 @@ function renderOver() {
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-// ---------- Background music via the official YouTube IFrame player ----------
-// Audio streams from YouTube (YouTube serves the content under its own licensing);
-// the game does not host or copy the tracks. Day/night tracks set by the user.
+// ---------- Background music: YouTube embed with a synthesized fallback ----------
+// Primary: the user's two tracks stream from the official YouTube IFrame player
+// (YouTube serves the audio under its own licensing). Fallback: if YouTube fails
+// to load/play (blocked embed, network, etc.), an original synthesized ambient
+// drone takes over so there is always music.
 const Music = (function () {
-  const DAY_ID = 'QmpLAPJhhBQ';
-  const NIGHT_ID = 'zsSD3XKBr8U';
-  let player = null, ready = false, enabled = false, mood = 'night', apiLoading = false;
+  const DAY_ID = 'QmpLAPJhhBQ', NIGHT_ID = 'zsSD3XKBr8U';
+  let player = null, ytReady = false, enabled = false, mood = 'night', apiLoading = false, fallback = false, readyTimer = null;
 
-  function ensureHost() {
-    if (document.getElementById('ytmusic')) return;
-    const d = document.createElement('div');
-    d.id = 'ytmusic';
-    d.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:200px;height:120px;opacity:0;pointer-events:none;';
-    document.body.appendChild(d);
+  // ----- synthesized fallback (Web Audio) -----
+  let ctx, master, voices = [], synthStarted = false, bellTimer = null;
+  const CHORDS = { day: [146.83, 220.00, 277.18], night: [98.00, 146.83, 174.61] };
+  function synthEnsure() { if (ctx) return; ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination); }
+  function synthBuild() {
+    synthStop();
+    (CHORDS[mood] || CHORDS.night).forEach((f, idx) => {
+      const o = ctx.createOscillator(); o.type = idx === 0 ? 'sine' : 'triangle'; o.frequency.value = f;
+      const g = ctx.createGain(); g.gain.value = 0;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + 0.025 * idx;
+      const lg = ctx.createGain(); lg.gain.value = 3; lfo.connect(lg); lg.connect(o.detune);
+      o.connect(g); g.connect(master); o.start(); lfo.start();
+      g.gain.linearRampToValueAtTime(mood === 'day' ? 0.085 : 0.11, ctx.currentTime + 3);
+      voices.push(o, lfo);
+    });
+    scheduleBell();
   }
+  function scheduleBell() { clearTimeout(bellTimer); bellTimer = setTimeout(() => { ringBell(); scheduleBell(); }, (mood === 'day' ? 10000 : 6500) + Math.random() * 7000); }
+  function ringBell() {
+    if (!ctx || !fallback || !enabled) return;
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine';
+    const base = mood === 'day' ? 523.25 : 196.00; o.frequency.value = base * (Math.random() < 0.5 ? 1 : 1.5);
+    o.connect(g); g.connect(master); const t = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(mood === 'day' ? 0.05 : 0.08, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (mood === 'day' ? 2.6 : 3.6)); o.start(t); o.stop(t + 4);
+  }
+  function synthStop() { voices.forEach(v => { try { v.stop(); } catch (e) {} try { v.disconnect(); } catch (e) {} }); voices = []; }
+  function startFallback() {
+    if (player && ytReady) { try { player.stopVideo(); } catch (e) {} }
+    fallback = true; synthEnsure(); if (ctx.resume) ctx.resume();
+    master.gain.cancelScheduledValues(ctx.currentTime); master.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 1.4);
+    if (!synthStarted) { synthBuild(); synthStarted = true; }
+    setLabel();
+  }
+
+  // ----- youtube primary -----
+  function ensureHost() { if (document.getElementById('ytmusic')) return; const d = document.createElement('div'); d.id = 'ytmusic'; d.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:200px;height:120px;opacity:0;pointer-events:none;'; document.body.appendChild(d); }
   function loadApi(cb) {
     if (window.YT && window.YT.Player) { cb(); return; }
     const prev = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = function () { if (prev) try { prev(); } catch (e) {} cb(); };
-    if (!apiLoading) {
-      apiLoading = true;
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(tag);
-    }
+    if (!apiLoading) { apiLoading = true; const tag = document.createElement('script'); tag.src = 'https://www.youtube.com/iframe_api'; tag.onerror = () => { if (enabled && !fallback) startFallback(); }; document.head.appendChild(tag); }
   }
   function createPlayer() {
-    player = new YT.Player('ytmusic', {
-      height: '120', width: '200',
-      videoId: mood === 'day' ? DAY_ID : NIGHT_ID,
-      playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, playsinline: 1, rel: 0 },
-      events: {
-        onReady: function (e) { ready = true; e.target.setVolume(40); if (enabled) e.target.playVideo(); },
-        onStateChange: function (e) { if (e.data === YT.PlayerState.ENDED) { e.target.seekTo(0); e.target.playVideo(); } }
-      }
-    });
+    try {
+      player = new YT.Player('ytmusic', {
+        height: '120', width: '200', videoId: mood === 'day' ? DAY_ID : NIGHT_ID,
+        playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, playsinline: 1, rel: 0 },
+        events: {
+          onReady: function (e) { ytReady = true; e.target.setVolume(40); if (enabled && !fallback) e.target.playVideo(); },
+          onStateChange: function (e) { if (e.data === YT.PlayerState.ENDED) { e.target.seekTo(0); e.target.playVideo(); } if (e.data === YT.PlayerState.PLAYING) clearTimeout(readyTimer); },
+          onError: function () { if (enabled && !fallback) startFallback(); }
+        }
+      });
+    } catch (e) { if (enabled && !fallback) startFallback(); }
   }
+  function setLabel() { const b = document.getElementById('musicBtn'); if (b) b.textContent = enabled ? ('♪ Music: On' + (fallback ? ' (ambient)' : '')) : '♪ Music: Off'; }
+
   return {
     toggle() {
       enabled = !enabled;
       if (enabled) {
-        ensureHost();
-        if (!player) loadApi(createPlayer);
-        else if (ready) player.playVideo();
+        if (fallback) { synthEnsure(); if (ctx.resume) ctx.resume(); master.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 1.2); if (!synthStarted) { synthBuild(); synthStarted = true; } }
+        else {
+          ensureHost();
+          if (!player) loadApi(createPlayer); else if (ytReady) player.playVideo();
+          clearTimeout(readyTimer);
+          readyTimer = setTimeout(() => { if (enabled && !fallback && (!player || !ytReady)) startFallback(); }, 7000);
+        }
       } else {
-        if (player && ready) player.pauseVideo();
+        if (fallback) { if (ctx) master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6); }
+        else if (player && ytReady) player.pauseVideo();
+        clearTimeout(readyTimer);
       }
+      setLabel();
       return enabled;
     },
     setMood(m) {
-      if (m === mood) return;
-      mood = m;
-      if (player && ready && enabled) player.loadVideoById(mood === 'day' ? DAY_ID : NIGHT_ID);
+      if (m === mood) return; mood = m;
+      if (!enabled) return;
+      if (fallback) { if (synthStarted) synthBuild(); }
+      else if (player && ytReady) player.loadVideoById(mood === 'day' ? DAY_ID : NIGHT_ID);
     },
     ensureButton() {
       const hdr = document.getElementById('gameHeader');
       if (!hdr || document.getElementById('musicBtn')) return;
       const b = document.createElement('button');
-      b.id = 'musicBtn'; b.className = 'btn tiny'; b.textContent = '\u266A Music: Off'; b.style.marginLeft = '12px';
-      b.onclick = () => { const on = Music.toggle(); b.textContent = on ? '\u266A Music: On' : '\u266A Music: Off'; };
+      b.id = 'musicBtn'; b.className = 'btn tiny'; b.textContent = '♪ Music: Off'; b.style.marginLeft = '12px';
+      b.onclick = () => { Music.toggle(); };
       const host = hdr.querySelector('.phase-info'); (host || hdr).appendChild(b);
     }
   };

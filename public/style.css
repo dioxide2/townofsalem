@@ -245,3 +245,6 @@ body.is-day .house-unit.selectable::before {
 .side-btn { width: 100%; margin-top: 10px; padding: 12px 10px; font-size: 0.9rem; line-height: 1.2; }
 .side-btn.jail-big { background: linear-gradient(180deg, #4a3a1c, #6e5a22); border-color: var(--gold); color: #f4e6c0; }
 .side-btn.danger { background: linear-gradient(180deg, #4a1c17, #6e2a22); border-color: var(--blood); color: #f4d3ca; }
+
+/* player's own name under their role title */
+.role-owner { display:block; font-family:'EB Garamond', serif; font-size:0.98rem; color:var(--parchment); font-weight:normal; letter-spacing:normal; text-transform:none; margin-top:3px; }
